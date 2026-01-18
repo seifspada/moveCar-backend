@@ -29,6 +29,15 @@ export class RegisterDto {
   password: string;
 
   @ApiProperty({
+    description: 'Photo de profil de l\'utilisateur',
+    example: '/uploads/photos/1234567890-avatar.jpg',
+    type: 'string',
+  })
+  @IsString()
+  @IsNotEmpty({ message: 'La photo est requise' })
+  photo: string;
+
+  @ApiProperty({
     description: 'ID du rôle',
     example: 2,
     default: 2,

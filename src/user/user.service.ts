@@ -9,52 +9,19 @@ import * as bcrypt from 'bcrypt';
 export class UserService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(createUserDto: CreateUserDto) {
-    // Vérifier si le rôle existe
-    const roleExists = await this.prisma.role.findUnique({
-      where: { id: createUserDto.roleId },
-    });
+async create(createUserDto: CreateUserDto) {
+  const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
-    if (!roleExists) {
-      throw new BadRequestException(`Le rôle avec l'ID ${createUserDto.roleId} n'existe pas`);
-    }
-
-    // Hasher le mot de passe
-    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-
-    try {
-      return await this.prisma.user.create({
-        data: {
-          name: createUserDto.name,
-          email: createUserDto.email,
-          password: hashedPassword,
-          roleId: createUserDto.roleId,
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          roleId: true,
-          role: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-          createdAt: true,
-          updatedAt: true,
-          // password: false (par défaut exclu)
-        },
-      });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
-          throw new ConflictException('Cet email est déjà utilisé');
-        }
-      }
-      throw error;
-    }
-  }
+  return this.prisma.user.create({
+    data: {
+      name: createUserDto.name,
+      email: createUserDto.email,
+      password: hashedPassword,
+      roleId: createUserDto.roleId,
+      photo: createUserDto.photo || '/default-avatar.png', // ← AJOUTER avec valeur par défaut
+    },
+  });
+}
 
   async findAll() {
     return this.prisma.user.findMany({

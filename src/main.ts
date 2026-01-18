@@ -1,4 +1,4 @@
-import 'dotenv/config'; // ← Charger les variables d'environnement
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ValidationPipe, Logger } from '@nestjs/common';
@@ -28,15 +28,15 @@ async function bootstrap() {
     new FastifyAdapter()
   );
 
-  // ✅ ACTIVER CORS - Autoriser le frontend Next.js
+  // ✅ ACTIVER CORS - Méthode NestJS (compatible avec Fastify)
   app.enableCors({
     origin: [
-      'http://localhost:3001',        // Frontend Next.js local
-      'http://192.168.56.1:3001',     // Frontend Next.js réseau
-      'http://127.0.0.1:3001',        // Alternative localhost
+      'http://localhost:3001',
+      'http://192.168.56.1:3001',
+      'http://127.0.0.1:3001',
     ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    credentials: true, // Permet l'envoi de cookies/tokens
+    credentials: true,
     allowedHeaders: [
       'Content-Type',
       'Authorization',

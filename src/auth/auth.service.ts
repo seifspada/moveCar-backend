@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
@@ -12,59 +12,38 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async register(registerDto: RegisterDto) {
-    // Vérifier si l'email existe déjà
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: registerDto.email },
-    });
+ async register(registerDto: RegisterDto) {
+  // Vérifier si l'utilisateur existe déjà
+  const existingUser = await this.prisma.user.findUnique({
+    where: { email: registerDto.email },
+  });
 
-    if (existingUser) {
-      throw new ConflictException('Cet email est déjà utilisé');
-    }
-
-    // Vérifier si le rôle existe
-    const roleExists = await this.prisma.role.findUnique({
-      where: { id: registerDto.roleId },
-    });
-
-    if (!roleExists) {
-      throw new ConflictException(`Le rôle avec l'ID ${registerDto.roleId} n'existe pas`);
-    }
-
-    // Hasher le mot de passe
-    const hashedPassword = await bcrypt.hash(registerDto.password, 10);
-
-    // Créer l'utilisateur
-    const user = await this.prisma.user.create({
-      data: {
-        name: registerDto.name,
-        email: registerDto.email,
-        password: hashedPassword,
-        roleId: registerDto.roleId,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        roleId: true,
-        role: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
-
-    // Générer le token JWT
-    const payload = { sub: user.id, email: user.email, roleId: user.roleId };
-    const accessToken = this.jwtService.sign(payload);
-
-    return {
-      user,
-      accessToken,
-    };
+  if (existingUser) {
+    throw new BadRequestException('User already exists');
   }
+
+  // Hasher le mot de passe
+  const hashedPassword = await bcrypt.hash(registerDto.password, 10);
+
+  // Créer l'utilisateur avec la photo
+  const user = await this.prisma.user.create({
+    data: {
+      name: registerDto.name,
+      email: registerDto.email,
+      password: hashedPassword,
+      roleId: registerDto.roleId,
+      photo: registerDto.photo, // ← AJOUTER CETTE LIGNE
+    },
+  });
+
+  // Retourner le token JWT
+  const payload = { sub: user.id, email: user.email };
+  return {
+    access_token: this.jwtService.sign(payload),
+    user,
+  };
+}
+
 
 async login(loginDto: LoginDto) {
   console.log('🔍 Tentative de login pour:', loginDto.email);

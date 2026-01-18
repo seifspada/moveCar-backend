@@ -4,6 +4,8 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")  // ← AJOUTER CETTE LIGNE
+
 }
 
 model Role {
@@ -19,6 +21,7 @@ model User {
   name      String
   email     String   @unique
   password  String
+  photo     String   // Vérifier que cette ligne existe
   roleId    Int
   role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())

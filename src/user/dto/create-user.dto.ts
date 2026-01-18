@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsEmail, IsNotEmpty, MinLength, IsInt, IsPositive } from 'class-validator';
+import { IsString, IsEmail, IsNotEmpty, MinLength, IsInt, IsPositive, IsOptional } from 'class-validator';
 
 export class CreateUserDto {
   @ApiProperty({
@@ -12,7 +12,7 @@ export class CreateUserDto {
 
   @ApiProperty({
     description: 'Email de l\'utilisateur',
-    example: 'john.doe@example.com',
+    example: 'john@example.com',
   })
   @IsEmail({}, { message: 'Email invalide' })
   @IsNotEmpty({ message: 'L\'email est requis' })
@@ -29,8 +29,17 @@ export class CreateUserDto {
   password: string;
 
   @ApiProperty({
-    description: 'ID du rôle à assigner',
-    example: 1,
+    description: 'Photo de profil de l\'utilisateur',
+    example: '/uploads/photos/avatar.jpg',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  photo?: string;
+
+  @ApiProperty({
+    description: 'ID du rôle',
+    example: 2,
   })
   @IsInt({ message: 'Le roleId doit être un nombre entier' })
   @IsPositive({ message: 'Le roleId doit être positif' })
