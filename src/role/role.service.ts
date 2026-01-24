@@ -2,14 +2,12 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
-import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class RoleService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createRoleDto: CreateRoleDto) {
-    // Validation explicite
     if (!createRoleDto || !createRoleDto.name) {
       throw new BadRequestException('Le nom du rôle est requis');
     }
@@ -17,12 +15,14 @@ export class RoleService {
     try {
       return await this.prisma.role.create({
         data: {
-          name: createRoleDto.name, // ← Utiliser createRoleDto.name, pas juste name
+          name: createRoleDto.name,
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
+      // ✅ Vérification compatible Prisma 7
+      if (error && typeof error === 'object' && 'code' in error) {
+        const prismaError = error as { code: string };
+        if (prismaError.code === 'P2002') {
           throw new ConflictException('Ce rôle existe déjà');
         }
       }
@@ -78,8 +78,10 @@ export class RoleService {
         data: updateRoleDto,
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
+      // ✅ Vérification compatible Prisma 7
+      if (error && typeof error === 'object' && 'code' in error) {
+        const prismaError = error as { code: string };
+        if (prismaError.code === 'P2002') {
           throw new ConflictException('Ce nom de rôle est déjà utilisé');
         }
       }
@@ -95,8 +97,10 @@ export class RoleService {
         where: { id },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2003') {
+      // ✅ Vérification compatible Prisma 7
+      if (error && typeof error === 'object' && 'code' in error) {
+        const prismaError = error as { code: string };
+        if (prismaError.code === 'P2003') {
           throw new ConflictException('Impossible de supprimer ce rôle car il est utilisé');
         }
       }

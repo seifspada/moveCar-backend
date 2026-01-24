@@ -2,26 +2,25 @@ import { Injectable, NotFoundException, ConflictException, BadRequestException }
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UserService {
   constructor(private readonly prisma: PrismaService) {}
 
-async create(createUserDto: CreateUserDto) {
-  const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+  async create(createUserDto: CreateUserDto) {
+    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
-  return this.prisma.user.create({
-    data: {
-      name: createUserDto.name,
-      email: createUserDto.email,
-      password: hashedPassword,
-      roleId: createUserDto.roleId,
-      photo: createUserDto.photo || '/default-avatar.png', // ← AJOUTER avec valeur par défaut
-    },
-  });
-}
+    return this.prisma.user.create({
+      data: {
+        name: createUserDto.name,
+        email: createUserDto.email,
+        password: hashedPassword,
+        roleId: createUserDto.roleId,
+        photo: createUserDto.photo || '/default-avatar.png',
+      },
+    });
+  }
 
   async findAll() {
     return this.prisma.user.findMany({
@@ -69,10 +68,8 @@ async create(createUserDto: CreateUserDto) {
   }
 
   async update(id: number, updateUserDto: UpdateUserDto) {
-    // Vérifier si l'utilisateur existe
     await this.findOne(id);
 
-    // Si un nouveau rôle est fourni, vérifier qu'il existe
     if (updateUserDto.roleId) {
       const roleExists = await this.prisma.role.findUnique({
         where: { id: updateUserDto.roleId },
@@ -83,7 +80,6 @@ async create(createUserDto: CreateUserDto) {
       }
     }
 
-    // Si un nouveau mot de passe est fourni, le hasher
     const dataToUpdate: any = { ...updateUserDto };
     if (updateUserDto.password) {
       dataToUpdate.password = await bcrypt.hash(updateUserDto.password, 10);
@@ -109,8 +105,10 @@ async create(createUserDto: CreateUserDto) {
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === 'P2002') {
+      // ✅ Vérification compatible Prisma 7 (sans import runtime/library)
+      if (error && typeof error === 'object' && 'code' in error) {
+        const prismaError = error as { code: string };
+        if (prismaError.code === 'P2002') {
           throw new ConflictException('Cet email est déjà utilisé');
         }
       }
@@ -119,7 +117,6 @@ async create(createUserDto: CreateUserDto) {
   }
 
   async remove(id: number) {
-    // Vérifier si l'utilisateur existe
     await this.findOne(id);
 
     return this.prisma.user.delete({

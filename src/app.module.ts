@@ -9,6 +9,7 @@ import { RoleModule } from './role/role.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
+import { DemandeModule } from './Module/demande/demande.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { AuthModule } from './auth/auth.module';
     RoleModule,
     UserModule,
     AuthModule,
+    DemandeModule,
   ],
   controllers: [AppController],
   providers: [AppService],

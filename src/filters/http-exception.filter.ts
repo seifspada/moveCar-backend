@@ -7,7 +7,6 @@ import {
   Logger,
 } from '@nestjs/common';
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { Prisma } from '@prisma/client';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
@@ -40,13 +39,12 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           : String(responseMessage);
       }
     }
-    else if (exception instanceof Prisma.PrismaClientKnownRequestError) {
+    // ✅ Vérification Prisma compatible avec Prisma 7
+    else if (exception && typeof exception === 'object' && 'code' in exception) {
+      const prismaError = exception as { code: string; meta?: any };
       statusCode = HttpStatus.BAD_REQUEST;
       
-      // Cast explicite pour accéder aux propriétés
-      const code = (exception as Prisma.PrismaClientKnownRequestError).code;
-      
-      switch (code) {
+      switch (prismaError.code) {
         case 'P2002':
           message = 'Cette ressource existe déjà';
           statusCode = HttpStatus.CONFLICT;
@@ -65,24 +63,21 @@ export class GlobalExceptionFilter implements ExceptionFilter {
           break;
         default:
           message = 'Erreur de base de données';
-          this.logger.error(`Prisma error code: ${code}`);
+          this.logger.error(`Prisma error code: ${prismaError.code}`);
       }
     }
-    else if (exception instanceof Prisma.PrismaClientValidationError) {
+    // ✅ Erreurs de validation Prisma (message commence par "Invalid")
+    else if (exception instanceof Error && exception.message.includes('Invalid `prisma')) {
       statusCode = HttpStatus.BAD_REQUEST;
       message = 'Données invalides';
     }
-    else if (exception instanceof Prisma.PrismaClientInitializationError) {
+    // ✅ Erreurs de connexion Prisma
+    else if (exception instanceof Error && 
+             (exception.message.includes('Can\'t reach database') || 
+              exception.message.includes('connection'))) {
       statusCode = HttpStatus.SERVICE_UNAVAILABLE;
       message = 'Erreur de connexion à la base de données';
-      const errorMessage = (exception as Prisma.PrismaClientInitializationError).message;
-      this.logger.error('Database connection error:', errorMessage);
-    }
-    else if (exception instanceof Prisma.PrismaClientRustPanicError) {
-      statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
-      message = 'Erreur critique de la base de données';
-      const errorMessage = (exception as Prisma.PrismaClientRustPanicError).message;
-      this.logger.error('Prisma panic error:', errorMessage);
+      this.logger.error('Database connection error:', exception.message);
     }
     else if (exception instanceof Error) {
       if (exception.message.includes('SASL') || 
@@ -111,10 +106,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     response.status(statusCode).send({
       statusCode,
       message,
-      ...(process.env.NODE_ENV === 'development' && {
-        timestamp: new Date().toISOString(),
-        path: request.url,
-      }),
+      timestamp: new Date().toISOString(),
+      path: request.url,
     });
   }
 }

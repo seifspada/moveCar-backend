@@ -1,3 +1,4 @@
+// src/auth/auth.controller.ts
 import { Controller, Post, Body, Get, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -5,7 +6,9 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
-import * as bcrypt from 'bcrypt'; // ✅ AJOUTEZ CETTE LIGNE
+import { VerifyResetCodeDto } from './dto/verify-reset-code.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { forgetPasswordDto } from './dto/forget-password.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -38,28 +41,38 @@ export class AuthController {
     return user;
   }
 
+  // ============================================
+  // FLUX DE RÉINITIALISATION DE MOT DE PASSE
+  // ============================================
 
-  @Post('reset-password-dev')
-@ApiOperation({ summary: 'Reset password (DEV ONLY)' })
-async resetPasswordDev(@Body() body: { email: string; newPassword: string }) {
-  // ⚠️ À SUPPRIMER EN PRODUCTION
-  const hashedPassword = await bcrypt.hash(body.newPassword, 10);
+  @Post('forget-password')
+  @ApiOperation({ summary: 'Étape 1: Demander un code de réinitialisation' })
+  @ApiResponse({ status: 200, description: 'Code envoyé par email' })
+  @ApiResponse({ status: 404, description: 'Email non trouvé en base de données' })
+  async forgetPassword(@Body() forgetPasswordDto: forgetPasswordDto) {
+    return this.authService.forgetPassword(forgetPasswordDto.email);
+  }
 
-  const user = await this.authService['prisma'].user.update({
-    where: { email: body.email },
-    data: { password: hashedPassword },
-    include: { role: true },
-  });
+  @Post('verify-reset-code')
+  @ApiOperation({ summary: 'Étape 2: Vérifier le code reçu par email' })
+  @ApiResponse({ status: 200, description: 'Code vérifié avec succès' })
+  @ApiResponse({ status: 400, description: 'Code invalide ou expiré' })
+  async verifyResetCode(@Body() verifyResetCodeDto: VerifyResetCodeDto) {
+    return this.authService.verifyResetCode(
+      verifyResetCodeDto.email,
+      verifyResetCodeDto.code,
+    );
+  }
 
-  // Vérifier immédiatement
-  const isValid = await bcrypt.compare(body.newPassword, hashedPassword);
-
-  return {
-    message: 'Mot de passe réinitialisé',
-    email: user.email,
-    role: user.role.name,
-    verification: isValid ? 'OK' : 'ERREUR',
-  };
-}
-
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Étape 3: Changer le mot de passe avec le code validé' })
+  @ApiResponse({ status: 200, description: 'Mot de passe réinitialisé avec succès' })
+  @ApiResponse({ status: 400, description: 'Code invalide ou expiré' })
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPassword(
+      resetPasswordDto.email,
+      resetPasswordDto.code,
+      resetPasswordDto.newPassword,
+    );
+  }
 }

@@ -24,9 +24,125 @@ model User {
   photo     String   // Vérifier que cette ligne existe
   roleId    Int
   role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  resetPasswordToken   String?   @unique
+  resetPasswordExpires DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([roleId])
+  @@index([email])
+}
+
+
+
+enum StatutDemande {
+  EN_ATTENTE
+  VALIDEE
+  REFUSEE
+}
+
+enum TypeDocument {
+  PERMIS
+  RC_CIRCULATION
+  RC_PRO
+  W_GARAGE
+}
+
+enum TypePack {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+// ==================== MODELS ====================
+
+model DemandeAdhesion {
+  id                Int              @id @default(autoincrement())
+  
+  // Informations personnelles
+  nom               String           @db.VarChar(20)
+  prenom            String           @db.VarChar(20)
+  dateNaissance     DateTime         @db.Date
+  email             String           @db.VarChar(255)
+  telephone         String           @db.VarChar(20)
+  adresse           String           @db.Text
+  ville             String          @db.VarChar(100)
+  // Informations professionnelles
+  raisonSociale     String           @db.VarChar(255)
+  numeroKbis        String           @db.VarChar(50)
+  
+  // Gestion du statut
+  statut            StatutDemande    @default(EN_ATTENTE)
+  
+  // Traçabilité
+  dateCreation      DateTime         @default(now())
+  dateModification  DateTime         @updatedAt
+  
+  // Relations
+  documents         Document[]
+  adherent          Adherent?
+  
+  @@map("demandes_adhesion")
+  @@index([statut])
+  @@index([email])
+  @@index([dateCreation])
+}
+
+model Document {
+  id                  Int              @id @default(autoincrement())
+  
+  // Type et identification
+  typeDocument        TypeDocument
+  numero              String?          @db.VarChar(100)
+  
+  // Dates de validité
+  dateDelivrance      DateTime?        @db.Date
+  dateDebutValidite   DateTime?        @db.Date
+  dateFinValidite     DateTime?        @db.Date
+  
+  // Informations complémentaires
+  montant             Decimal?         @db.Decimal(10, 2)
+  
+  // Stockage fichier
+  cheminFichier       String           @db.VarChar(500)
+  
+  // Relation avec la demande
+  demandeAdhesionId   Int
+  demandeAdhesion     DemandeAdhesion  @relation(fields: [demandeAdhesionId], references: [id], onDelete: Cascade)
+  
+  // Traçabilité
+  dateCreation        DateTime         @default(now())
+  dateModification    DateTime         @updatedAt
+  
+  @@map("documents")
+  @@index([demandeAdhesionId])
+  @@index([typeDocument])
+}
+
+model Adherent {
+  id                  Int              @id @default(autoincrement())
+  
+  // Authentification
+  email               String           @unique @db.VarChar(255)
+  motDePasse          String           @db.VarChar(255)
+  
+  // Informations personnelles
+  nom                 String           @db.VarChar(100)
+  prenom              String           @db.VarChar(100)
+  
+  // Profil adhérent
+  typePack            TypePack         @default(BRONZE)
+  photoUrl            String?          @db.VarChar(500)
+  
+  // Relation avec la demande d'origine
+  demandeAdhesionId   Int              @unique
+  demandeAdhesion     DemandeAdhesion  @relation(fields: [demandeAdhesionId], references: [id], onDelete: Restrict)
+  
+  // Traçabilité
+  dateCreation        DateTime         @default(now())
+  dateModification    DateTime         @updatedAt
+  
+  @@map("adherents")
   @@index([email])
 }
