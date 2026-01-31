@@ -4,41 +4,16 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")  // ← AJOUTER CETTE LIGNE
-
+  url      = env("DATABASE_URL")
 }
 
-model Role {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  users     User[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model User {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  password  String
-  photo     String   // Vérifier que cette ligne existe
-  roleId    Int
-  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
-  resetPasswordToken   String?   @unique
-  resetPasswordExpires DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([roleId])
-  @@index([email])
-}
+// ==================== ENUMS ====================
 
 
-
-enum StatutDemande {
-  EN_ATTENTE
-  VALIDEE
-  REFUSEE
+enum StatutAdherent {
+  ACTIF
+  SUSPENDU
+  RESILIE
 }
 
 enum TypeDocument {
@@ -46,31 +21,136 @@ enum TypeDocument {
   RC_CIRCULATION
   RC_PRO
   W_GARAGE
+  CARTE_IDENTITE      
+  RIB                 
+  CASIER_JUDICIAIRE   
+  KBIS               
+  
 }
+
 
 enum TypePack {
-  BRONZE
-  SILVER
-  GOLD
-  PLATINUM
+  premium
+  basic
+ 
 }
 
-// ==================== MODELS ====================
+// ====================Partenaire======================
+
+enum StatutEntreprise {
+  DIRECTEUR_GENERAL
+  DIRECTEUR
+  MANAGER
+  RESPONSABLE_TRANSPORT
+  RESPONSABLE_LOGISTIQUE
+  CHEF_ENTREPRISE
+  AUTRE
+
+  @@map("statut_entreprise")
+}
+enum StatutDemande {
+  EN_ATTENTE
+  EN_COURS_TRAITEMENT  
+  VALIDEE              
+  ACCEPTEE             
+  REFUSEE
+  ANNULEE              
+  
+  @@map("statut_demande")
+}
+
+enum TypeRendezvous {
+  TELEPHONIQUE
+  PHYSIQUE
+
+  @@map("type_rendezvous")
+}
+
+enum StatutRendezvous {
+  PLANIFIE
+  CONFIRME
+  EN_COURS
+  TERMINE
+  ANNULE
+  REPORTE
+
+  @@map("statut_rendezvous")
+}
+
+enum ResultatRendezvous {
+  INTERESSE
+  A_RECONTACTER
+  NON_INTERESSE
+  CONTRAT_SIGNE
+
+  @@map("resultat_rendezvous")
+}
+
+enum TypeReservation {
+  RENDEZ_VOUS
+  CONGE
+  JOUR_FERIE
+  EVENEMENT_INTERNE
+  AUTRE
+
+  @@map("type_reservation")
+}
+
+
+
+
+// ==================== UTILISATEURS SYSTÈME ====================
+
+model Role {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique @db.VarChar(50)
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("roles")
+}
+
+model User {
+  id                   Int       @id @default(autoincrement())
+  name                 String    @db.VarChar(100)
+  email                String    @unique @db.VarChar(255)
+  password             String
+  photo                String?   @default("/default-avatar.png")
+  roleId               Int
+  role                 Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  resetPasswordToken   String?   @unique
+  resetPasswordExpires DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  adherent             Adherent?
+
+  @@index([roleId])
+  @@index([email])
+  @@map("users")
+}
+
+// ==================== DEMANDES D'ADHÉSION ====================
 
 model DemandeAdhesion {
   id                Int              @id @default(autoincrement())
   
   // Informations personnelles
-  nom               String           @db.VarChar(20)
-  prenom            String           @db.VarChar(20)
+  nom               String           @db.VarChar(100) 
+  prenom            String           @db.VarChar(100)  
   dateNaissance     DateTime         @db.Date
-  email             String           @db.VarChar(255)
+  email             String           @unique @db.VarChar(255) 
   telephone         String           @db.VarChar(20)
   adresse           String           @db.Text
-  ville             String          @db.VarChar(100)
+  ville             String           @db.VarChar(100)
+  
   // Informations professionnelles
   raisonSociale     String           @db.VarChar(255)
   numeroKbis        String           @db.VarChar(50)
+
+  profileToken      String?          @unique
+  profileTokenExpiry DateTime?       // Expiration 7 jours
   
   // Gestion du statut
   statut            StatutDemande    @default(EN_ATTENTE)
@@ -81,13 +161,17 @@ model DemandeAdhesion {
   
   // Relations
   documents         Document[]
-  adherent          Adherent?
+  adherent          Adherent[]
   
   @@map("demandes_adhesion")
   @@index([statut])
   @@index([email])
   @@index([dateCreation])
+  @@index([profileToken])
+
 }
+
+// ==================== DOCUMENTS ====================
 
 model Document {
   id                  Int              @id @default(autoincrement())
@@ -120,29 +204,201 @@ model Document {
   @@index([typeDocument])
 }
 
+// ==================== ADHÉRENTS ====================
+
 model Adherent {
-  id                  Int              @id @default(autoincrement())
-  
-  // Authentification
-  email               String           @unique @db.VarChar(255)
-  motDePasse          String           @db.VarChar(255)
+  id                   Int              @id @default(autoincrement())
+
+  // Relation avec User (authentification)
+  userId               Int              @unique
+  user                 User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   // Informations personnelles
-  nom                 String           @db.VarChar(100)
-  prenom              String           @db.VarChar(100)
+  nom                  String           @db.VarChar(100)
+  prenom               String           @db.VarChar(100)
+  numeroAdherent       String?          @unique @db.VarChar(50)  // ✅ AJOUTER CE CHAMP
+  dateNaissance        DateTime?        @db.Date                  // ✅ AJOUTER CE CHAMP
+  telephone            String           @db.VarChar(20)  
+  adresse              String?          @db.Text                  // ✅ AJOUTER CE CHAMP
+  codePostal           String?          @db.VarChar(10)          // ✅ AJOUTER CE CHAMP
+  ville                String           @db.VarChar(100) 
+  
+  // Informations professionnelles
+  raisonSociale        String           @db.VarChar(255) 
+  numeroKbis           String           @db.VarChar(50)  
   
   // Profil adhérent
-  typePack            TypePack         @default(BRONZE)
-  photoUrl            String?          @db.VarChar(500)
+  typePack             TypePack         @default(basic)
+  statut               StatutAdherent   @default(ACTIF) 
+  photoUrl             String?          @db.VarChar(500)
+  
+  // Gestion du blocage
+  estBloque            Boolean          @default(false)
+  raisonBlocage        String?          @db.Text
+  dateBlocage          DateTime?
+  
+  // Gestion cotisation
+  dateAdhesion         DateTime         @default(now())  
+  dateExpiration       DateTime?       
+  montantCotisation    Decimal?         @db.Decimal(10, 2) 
   
   // Relation avec la demande d'origine
-  demandeAdhesionId   Int              @unique
-  demandeAdhesion     DemandeAdhesion  @relation(fields: [demandeAdhesionId], references: [id], onDelete: Restrict)
+  demandeAdhesionId    Int
+  demandeAdhesion      DemandeAdhesion  @relation(fields: [demandeAdhesionId], references: [id], onDelete: Restrict)
   
   // Traçabilité
-  dateCreation        DateTime         @default(now())
-  dateModification    DateTime         @updatedAt
+  dateCreation         DateTime         @default(now())
+  dateModification     DateTime         @updatedAt
   
   @@map("adherents")
+  @@index([userId])
+  @@index([statut])
+  @@index([estBloque])
+  @@index([demandeAdhesionId])
+  @@index([numeroAdherent])
+}
+
+
+//-------------------partenaire----------
+model DemandePartenaire {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Informations de contact
+  nom       String   @db.VarChar(100)
+  entite    String   @db.VarChar(150)
+  statut    StatutEntreprise
+  telephone String   @db.VarChar(20)
+  email     String   @db.VarChar(255)
+
+  // Renseignements optionnels
+  nombreDeplacements Int?
+  nombreAgences      Int?
+
+  // Statut de la demande
+  statutDemande StatutDemande @default(EN_ATTENTE)
+
+  // Relation avec le rendez-vous
+  rendezvous Rendezvous?
+
+  // Relation avec le partenaire créé (si accepté)
+  partenaireId Int?       @unique
+  partenaire   Partenaire? @relation(fields: [partenaireId], references: [id])
+
+  // Notes internes
+  notesInternes String? @db.Text
+
   @@index([email])
+  @@index([statutDemande])
+  @@index([createdAt])
+  @@index([statutDemande, createdAt])
+  @@map("demandes_partenaire")
+}
+
+
+model Rendezvous {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Type et date
+  typeRdv TypeRendezvous
+  dateRdv DateTime       @db.Date
+  creneau String         @db.VarChar(20)
+
+  // Statut du rendez-vous
+  statut StatutRendezvous @default(PLANIFIE)
+
+  // Relations
+  demandePartenaireId Int              @unique
+  demandePartenaire   DemandePartenaire @relation(fields: [demandePartenaireId], references: [id], onDelete: Cascade)
+
+  creneauReserveId Int?            @unique
+  creneauReserve   CreneauReserve? @relation(fields: [creneauReserveId], references: [id])
+
+  // Lien visio ou adresse
+  lienVisio String? @db.VarChar(500)
+  adresse   String? @db.VarChar(500)
+
+  // Informations supplémentaires
+  rappelEnvoye Boolean  @default(false)
+  dateRappel   DateTime?
+  
+  // Notes de rendez-vous
+  compteRendu String? @db.Text
+  resultat    ResultatRendezvous?
+
+  @@index([dateRdv])
+  @@index([statut])
+  @@index([typeRdv])
+  @@index([dateRdv, statut])
+  @@map("rendezvous")
+}
+
+model CreneauReserve {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+
+  // Date et créneau
+  date    DateTime @db.Date
+  creneau String   @db.VarChar(20)
+
+  // Type de réservation
+  type TypeReservation @default(RENDEZ_VOUS)
+
+  // Relation optionnelle avec un rendez-vous
+  rendezvous Rendezvous?
+
+  // Pour les réservations personnalisées
+  motif          String?   @db.VarChar(255)
+  estActif       Boolean   @default(true)
+  dateExpiration DateTime?
+
+  @@unique([date, creneau])
+  @@index([date])
+  @@index([estActif])
+  @@index([date, estActif])
+  @@map("creneaux_reserves")
+}
+model DateIndisponible {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+
+  date  DateTime @db.Date
+  motif String   @db.VarChar(255)
+
+  estActif Boolean @default(true)
+
+  @@unique([date])
+  @@index([date])
+  @@index([estActif])
+  @@index([date, estActif])
+  @@map("dates_indisponibles")
+}
+
+model Partenaire {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Informations de base
+  nom       String @db.VarChar(100)
+  entite    String @db.VarChar(150)
+  email     String @unique @db.VarChar(255)
+  telephone String @db.VarChar(20)
+
+  // Statut
+  estActif Boolean @default(true)
+
+  // Relation avec la demande initiale
+  demandeInitiale DemandePartenaire?
+
+  // Vous pouvez ajouter userId plus tard pour l'authentification
+  // userId Int? @unique
+  // user   User? @relation(fields: [userId], references: [id])
+
+  @@index([email])
+  @@index([estActif])
+  @@map("partenaires")
 }

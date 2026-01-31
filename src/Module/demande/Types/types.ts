@@ -5,7 +5,7 @@ export type FastifyFileKV = {
   value: Buffer;
 };
 
-export type DemandeFiles = {
+export type DemandeAdherentFiles = {
   carteIdentite?: FastifyFileKV[]; // 2
   permisRectoVerso?: FastifyFileKV[]; // 2
   kbis?: FastifyFileKV[]; // 1

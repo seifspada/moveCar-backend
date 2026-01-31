@@ -31,15 +31,16 @@ export class AuthController {
     return this.authService.login(loginDto);
   }
 
-  @Get('profile')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('Bearer')
-  @ApiOperation({ summary: 'Récupérer le profil de l\'utilisateur connecté' })
-  @ApiResponse({ status: 200, description: 'Profil utilisateur' })
-  @ApiResponse({ status: 401, description: 'Non authentifié' })
-  async getProfile(@CurrentUser() user: any) {
-    return user;
-  }
+ @Get('profile')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth('Bearer')
+@ApiOperation({ summary: 'Récupérer le profil de l\'utilisateur connecté' })
+@ApiResponse({ status: 200, description: 'Profil utilisateur' })
+@ApiResponse({ status: 401, description: 'Non authentifié' })
+async getProfile(@CurrentUser() user: any) {
+  // Recharger l'utilisateur avec les données adherent
+  return this.authService.validateUser(user.id);
+}
 
   // ============================================
   // FLUX DE RÉINITIALISATION DE MOT DE PASSE

@@ -1,0 +1,189 @@
+// src/Module/demande-partenaire/demande-partenaire.controller.ts
+
+import { 
+  Controller, 
+  Post, 
+  Get, 
+  Put,
+  Patch,
+  Body, 
+  Param, 
+  ParseIntPipe,
+  Query,
+  HttpCode,
+  HttpStatus,
+  Delete
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { DemandePartenaireService } from './demande-partenaire.service';
+import { CreateDemandePartenaireDto } from './dto/create-demande-partenaire.dto';
+import { StatutDemande } from '@prisma/client';
+import { BloquerDateDto } from './dto/bloquer-date.dto';
+import { DebloquerDateDto } from './dto/debloquer-date.dto';
+
+@ApiTags('Demandes Partenaire')
+@Controller('demandes-partenaire')
+export class DemandePartenaireController {
+  constructor(
+    private readonly demandePartenaireService: DemandePartenaireService
+  ) {}
+
+  // ==========================================
+  // 📝 CRÉATION DE DEMANDE (PUBLIC)
+  // ==========================================
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Créer une nouvelle demande de partenariat' })
+  @ApiResponse({ status: 201, description: 'Demande créée avec succès' })
+  @ApiResponse({ status: 400, description: 'Données invalides ou date dans le passé' })
+  @ApiResponse({ status: 409, description: 'Demande déjà existante ou créneau réservé' })
+  create(@Body() createDto: CreateDemandePartenaireDto) {
+    return this.demandePartenaireService.create(createDto);
+  }
+
+  // ==========================================
+  // 🗓️ GESTION DES CRÉNEAUX (PUBLIC)
+  // ⚠️ IMPORTANT: Ces routes DOIVENT être AVANT @Get(':id')
+  // ==========================================
+
+  @Get('creneaux/disponibles')
+  @ApiOperation({ summary: 'Récupérer les créneaux disponibles pour une date' })
+  @ApiQuery({ name: 'date', example: '2026-02-15', description: 'Date au format YYYY-MM-DD' })
+  @ApiResponse({ status: 200, description: 'Créneaux récupérés avec succès' })
+  @ApiResponse({ status: 400, description: 'Format de date invalide' })
+  getCreneauxDisponibles(@Query('date') date: string) {
+    return this.demandePartenaireService.getCreneauxDisponibles(date);
+  }
+
+  @Get('dates/indisponibles')
+  @ApiOperation({ summary: 'Récupérer les dates indisponibles du mois' })
+  @ApiQuery({ name: 'annee', example: 2026, description: 'Année' })
+  @ApiQuery({ name: 'mois', example: 2, description: 'Mois (1-12)' })
+  @ApiResponse({ status: 200, description: 'Dates indisponibles récupérées' })
+  getDatesIndisponibles(
+    @Query('annee', ParseIntPipe) annee: number,
+    @Query('mois', ParseIntPipe) mois: number
+  ) {
+    return this.demandePartenaireService.getDatesIndisponibles(annee, mois);
+  }
+
+  // ==========================================
+  // 📊 STATISTIQUES (ADMIN)
+  // ==========================================
+
+  @Get('statistiques')
+  @ApiOperation({ summary: 'Récupérer les statistiques des demandes partenaires' })
+  @ApiResponse({ status: 200, description: 'Statistiques récupérées' })
+  getStatistiques() {
+    return this.demandePartenaireService.getStatistiques();
+  }
+
+  // ==========================================
+  // 📋 RÉCUPÉRATION DES DEMANDES (ADMIN)
+  // ==========================================
+
+  @Get('statut/:statut')
+  @ApiOperation({ summary: 'Récupérer les demandes par statut' })
+  @ApiResponse({ status: 200, description: 'Demandes récupérées' })
+  findByStatut(@Param('statut') statut: StatutDemande) {
+    return this.demandePartenaireService.findByStatut(statut);
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Récupérer toutes les demandes de partenariat' })
+  @ApiResponse({ status: 200, description: 'Liste des demandes récupérée' })
+  findAll() {
+    return this.demandePartenaireService.findAll();
+  }
+
+  // ==========================================
+  // 🔍 RÉCUPÉRATION PAR ID (ADMIN)
+  // ⚠️ Cette route DOIT être APRÈS les routes spécifiques
+  // ==========================================
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Récupérer une demande de partenariat par ID' })
+  @ApiResponse({ status: 200, description: 'Demande trouvée' })
+  @ApiResponse({ status: 404, description: 'Demande introuvable' })
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.demandePartenaireService.findOne(id);
+  }
+
+  // ==========================================
+  // ✅ VALIDATION DE DEMANDE (ADMIN)
+  // ==========================================
+
+  @Patch(':id/accepter')
+  @ApiOperation({ summary: 'Accepter une demande de partenariat' })
+  @ApiResponse({ status: 200, description: 'Demande acceptée avec succès' })
+  @ApiResponse({ status: 404, description: 'Demande introuvable' })
+  @ApiResponse({ status: 409, description: 'Demande déjà traitée' })
+  accepterDemande(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('profileUrl') profileUrl: string
+  ) {
+    return this.demandePartenaireService.accepterDemande(id, profileUrl);
+  }
+
+  @Patch(':id/refuser')
+  @ApiOperation({ summary: 'Refuser une demande de partenariat' })
+  @ApiResponse({ status: 200, description: 'Demande refusée' })
+  @ApiResponse({ status: 404, description: 'Demande introuvable' })
+  refuserDemande(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('motif') motif?: string
+  ) {
+    return this.demandePartenaireService.refuserDemande(id, motif);
+  }
+
+  // ==========================================
+  // 📅 CONFIRMATION DE RENDEZ-VOUS (ADMIN)
+  // ==========================================
+
+  @Patch(':id/confirmer-rdv')
+  @ApiOperation({ summary: 'Confirmer un rendez-vous' })
+  @ApiResponse({ status: 200, description: 'Rendez-vous confirmé' })
+  @ApiResponse({ status: 404, description: 'Demande introuvable' })
+  @ApiResponse({ status: 400, description: 'Pas de rendez-vous associé' })
+  confirmerRendezvous(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() data: { lienVisio?: string; adresse?: string }
+  ) {
+    return this.demandePartenaireService.confirmerRendezvous(
+      id,
+      data.lienVisio,
+      data.adresse
+    );
+  }
+
+  // ==========================================
+  // 🚫 GESTION DES DATES BLOQUÉES (ADMIN)
+  // ==========================================
+
+ @Post('dates/bloquer')
+@ApiOperation({ summary: 'Bloquer une date (jour férié, congé, etc.)' })
+@ApiResponse({ status: 201, description: 'Date bloquée avec succès' })
+@ApiResponse({ status: 409, description: 'Date déjà bloquée' })
+bloquerDate(@Body() dto: BloquerDateDto) {
+  return this.demandePartenaireService.bloquerDate(dto.date, dto.motif);
+}
+
+@Patch('dates/debloquer')
+@ApiOperation({ summary: 'Débloquer une date' })
+@ApiResponse({ status: 200, description: 'Date débloquée avec succès' })
+@ApiResponse({ status: 404, description: 'Date non bloquée' })
+debloquerDate(@Body() dto: DebloquerDateDto) {
+  return this.demandePartenaireService.debloquerDate(dto.date);
+}
+
+ @Delete(':id')
+  @ApiOperation({ summary: 'Supprimer une demande de partenariat' })
+  @ApiParam({ name: 'id', type: 'number', description: 'ID de la demande' })
+  @ApiResponse({ status: 200, description: 'Demande supprimée avec succès' })
+  @ApiResponse({ status: 404, description: 'Demande introuvable' })
+  @ApiResponse({ status: 400, description: 'Impossible de supprimer cette demande' })
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    return this.demandePartenaireService.remove(id);
+  }
+}

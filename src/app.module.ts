@@ -9,7 +9,9 @@ import { RoleModule } from './role/role.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
-import { DemandeModule } from './Module/demande/demande.module';
+import { DemandeAdherentModule } from './Module/demande/demande-adherent.module';
+import { AdherentModule } from './Module/adherent/adherent.module';
+import { DemandePartenaireModule } from './Module/demande-partenaire/demande-partenaire.module';
 
 @Module({
   imports: [
@@ -30,7 +32,10 @@ import { DemandeModule } from './Module/demande/demande.module';
     RoleModule,
     UserModule,
     AuthModule,
-    DemandeModule,
+    DemandeAdherentModule,
+    AdherentModule,
+    DemandePartenaireModule,
+
   ],
   controllers: [AppController],
   providers: [AppService],
