@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { StatutDemande, TypeDocument } from '@prisma/client';
 import { promises as fs } from 'fs';
@@ -19,6 +24,8 @@ export class DemandeAdherentService {
     private readonly emailService: EmailService,
     private readonly geoService: GeoService,
   ) {}
+
+  // ================== FICHIERS & CRÉATION ==================
 
   private static readonly ALLOWED_MIME = new Set([
     'application/pdf',
@@ -80,156 +87,163 @@ export class DemandeAdherentService {
   }
 
   async create(dto: CreateDemandeAdherentDto, files: DemandeAdherentFiles) {
-  // 1) email existe ?
-  const existingDemande = await this.prisma.demandeAdhesion.findFirst({
-    where: { email: dto.email },
-  });
+    // 1) Vérifier email non utilisé ailleurs (partenaire + demande adhésion)
+    const existingPartnerDemand = await this.prisma.demandePartenaire.findFirst({
+      where: { email: dto.email },
+    });
 
-  if (existingDemande) {
-    throw new BadRequestException('Une demande avec cet email existe déjà');
-  }
+    if (existingPartnerDemand) {
+      throw new BadRequestException(
+        "Cet email est déjà utilisé pour une demande de partenariat. Un email ne peut être associé qu'à un seul type de demande.",
+      );
+    }
 
-  // 2) ✅ valider fichiers AVANT insertion DB
-  this.validateAllFiles(files);
+    const existingPartner = await this.prisma.partenaire.findFirst({
+      where: { email: dto.email },
+    });
 
-  // 3) ✅ valider ville France AVANT insertion DB
-  await this.geoService.assertVilleFrance(dto.ville);
+    if (existingPartner) {
+      throw new BadRequestException(
+        "Cet email est déjà associé à un compte partenaire. Un email ne peut être associé qu'à un seul type de rôle.",
+      );
+    }
 
-  // 4) create DB (seulement si tout est OK)
-  const demande = await this.prisma.demandeAdhesion.create({
-    data: {
-      nom: dto.nom,
-      prenom: dto.prenom,
-      dateNaissance: new Date(dto.dateNaissance),
-      email: dto.email,
-      telephone: dto.telephone,
-      adresse: dto.adresse,
-      ville: dto.ville,
-      raisonSociale: dto.raisonSociale,
-      numeroKbis: dto.numeroKbis,
-      statut: StatutDemande.EN_ATTENTE,
-    },
-  });
+    const existingDemande = await this.prisma.demandeAdhesion.findFirst({
+      where: { email: dto.email },
+    });
 
-  // 5) save files + documents
-  const uploadDir = path.join(process.cwd(), 'uploads', 'demandes', String(demande.id));
-  await fs.mkdir(uploadDir, { recursive: true });
+    if (existingDemande) {
+      throw new BadRequestException('Une demande avec cet email existe déjà');
+    }
 
-  // ✅ Enregistrer CARTE_IDENTITE (2 fichiers)
-  for (const f of files.carteIdentite ?? []) {
-    const { fileName } = await this.saveFile(uploadDir, 'carteIdentite', f);
+    // 2) Valider fichiers
+    this.validateAllFiles(files);
 
-    await this.prisma.document.create({
+    // 3) Valider ville
+    await this.geoService.assertVilleFrance(dto.ville);
+
+    // 4) Créer la demande
+    const demande = await this.prisma.demandeAdhesion.create({
       data: {
-        typeDocument: TypeDocument.CARTE_IDENTITE,
-        cheminFichier: `/uploads/demandes-adhesion/${demande.id}/${fileName}`,
-        demandeAdhesionId: demande.id,
+        nom: dto.nom,
+        prenom: dto.prenom,
+        dateNaissance: new Date(dto.dateNaissance),
+        email: dto.email,
+        telephone: dto.telephone,
+        adresse: dto.adresse,
+        ville: dto.ville,
+        raisonSociale: dto.raisonSociale,
+        numeroKbis: dto.numeroKbis,
+        statut: StatutDemande.EN_ATTENTE,
+      },
+    });
+
+    // 5) Sauvegarde fichiers + documents
+    const uploadDir = path.join(process.cwd(), 'uploads', 'demandes', String(demande.id));
+    await fs.mkdir(uploadDir, { recursive: true });
+
+    // Carte identité
+    for (const f of files.carteIdentite ?? []) {
+      const { fileName } = await this.saveFile(uploadDir, 'carteIdentite', f);
+
+      await this.prisma.document.create({
+        data: {
+          typeDocument: TypeDocument.CARTE_IDENTITE,
+          cheminFichier: `/uploads/demandes-adhesion/${demande.id}/${fileName}`,
+          demandeAdhesionId: demande.id,
+        },
+      });
+    }
+
+    // Permis
+    for (const f of files.permisRectoVerso ?? []) {
+      const { fileName } = await this.saveFile(uploadDir, 'permisRectoVerso', f);
+
+      await this.prisma.document.create({
+        data: {
+          typeDocument: TypeDocument.PERMIS,
+          cheminFichier: `/uploads/demandes-adhesion/${demande.id}/${fileName}`,
+          demandeAdhesionId: demande.id,
+          numero: dto.numeroPermis,
+          dateDelivrance: new Date(dto.dateDelivrance),
+        },
+      });
+    }
+
+    const singles: Array<[keyof DemandeAdherentFiles, TypeDocument]> = [
+      ['kbis', TypeDocument.KBIS],
+      ['rib', TypeDocument.RIB],
+      ['assuranceRcPro', TypeDocument.RC_PRO],
+      ['assuranceRcCirculation', TypeDocument.RC_CIRCULATION],
+      ['casierJudiciaire', TypeDocument.CASIER_JUDICIAIRE],
+      ['carteGrisWgarage', TypeDocument.W_GARAGE],
+    ];
+
+    for (const [key, docType] of singles) {
+      const arr = files[key] ?? [];
+      if (!arr.length) continue;
+
+      const { fileName } = await this.saveFile(uploadDir, String(key), arr[0]);
+
+      await this.prisma.document.create({
+        data: {
+          typeDocument: docType,
+          cheminFichier: `/uploads/demandes-adhesion/${demande.id}/${fileName}`,
+          demandeAdhesionId: demande.id,
+        },
+      });
+    }
+
+    // 6) Emails
+    try {
+      await this.emailService.sendDemandeRecueAdherent({
+        email: dto.email,
+        nom: dto.nom,
+        prenom: dto.prenom,
+      });
+    } catch (error: any) {
+      console.error('Erreur envoi email adhérent:', {
+        email: dto.email,
+        error: error.message,
+      });
+    }
+
+    try {
+      await this.emailService.sendNouvelleDemandeAdmin({
+        email: dto.email,
+        nom: dto.nom,
+        prenom: dto.prenom,
+        telephone: dto.telephone,
+        typeAdhesion: dto.raisonSociale ? 'Professionnel' : 'Particulier',
+        dateInscription: new Date(),
+      });
+    } catch (error: any) {
+      console.error('Erreur envoi email admin:', {
+        email: dto.email,
+        error: error.message,
+      });
+    }
+
+    return this.prisma.demandeAdhesion.findUnique({
+      where: { id: demande.id },
+      include: {
+        documents: {
+          orderBy: { typeDocument: 'asc' },
+        },
       },
     });
   }
 
-  // ✅ Enregistrer PERMIS (2 fichiers)
-  for (const f of files.permisRectoVerso ?? []) {
-    const { fileName } = await this.saveFile(uploadDir, 'permisRectoVerso', f);
+  // ================== LECTURE / FILTRES ==================
 
-    await this.prisma.document.create({
-      data: {
-        typeDocument: TypeDocument.PERMIS,
-        cheminFichier: `/uploads/demandes-adhesion/${demande.id}/${fileName}`,
-        demandeAdhesionId: demande.id,
-        numero: dto.numeroPermis,
-        dateDelivrance: new Date(dto.dateDelivrance),
-      },
-    });
-  }
-
-  // ✅ Mapping des fichiers uniques avec leur TypeDocument
-  const singles: Array<[keyof DemandeAdherentFiles, TypeDocument]> = [
-    ['kbis', TypeDocument.KBIS],
-    ['rib', TypeDocument.RIB],
-    ['assuranceRcPro', TypeDocument.RC_PRO],
-    ['assuranceRcCirculation', TypeDocument.RC_CIRCULATION],
-    ['casierJudiciaire', TypeDocument.CASIER_JUDICIAIRE],
-    ['carteGrisWgarage', TypeDocument.W_GARAGE],
-  ];
-
-  // ✅ Enregistrer tous les documents uniques
-  for (const [key, docType] of singles) {
-    const arr = files[key] ?? [];
-    if (!arr.length) continue;
-
-    const { fileName } = await this.saveFile(uploadDir, String(key), arr[0]);
-
-    await this.prisma.document.create({
-      data: {
-        typeDocument: docType,
-        cheminFichier: `/uploads/demandes-adhesion/${demande.id}/${fileName}`,
-        demandeAdhesionId: demande.id,
-      },
-    });
-  }
-
-  // 6) ✅ send emails (après succès complet)
-  try {
-    // Email à l'adhérent
-    await this.emailService.sendDemandeRecueAdherent({
-      email: dto.email,
-      nom: dto.nom,
-      prenom: dto.prenom, // ✅ Ajouter le prénom
-    });
-  } catch (error) {
-    console.error('❌ Erreur envoi email adhérent:', {
-      email: dto.email,
-      error: error.message
-    });
-    // Ne pas bloquer la création si l'email échoue
-  }
-
-  try {
-    // Email à l'admin
-    await this.emailService.sendNouvelleDemandeAdmin({
-      email: dto.email,
-      nom: dto.nom,
-      prenom: dto.prenom,
-      telephone: dto.telephone,
-      typeAdhesion: dto.raisonSociale ? 'Professionnel' : 'Particulier', // ✅ Déterminer le type
-      dateInscription: new Date(), // ✅ Date actuelle
-    });
-  } catch (error) {
-    console.error('❌ Erreur envoi email admin:', {
-      email: dto.email,
-      error: error.message
-    });
-    // Ne pas bloquer la création si l'email échoue
-  }
-
-  return this.prisma.demandeAdhesion.findUnique({
-    where: { id: demande.id },
-    include: { 
-      documents: {
-        orderBy: { typeDocument: 'asc' },
-      },
-    },
-  });
-}
-
-
-  // ✅ Récupérer toutes les demandes
   async findAll() {
     return this.prisma.demandeAdhesion.findMany({
-      include: { 
-        documents: {
-          orderBy: { typeDocument: 'asc' },  // ✅ Trier par type
-        },
-        adherent: {  // ✅ Pluriel si relation 1:N
+      include: {
+        documents: { orderBy: { typeDocument: 'asc' } },
+        adherent: {
           include: {
             user: {
-              select: {
-                id: true,
-                email: true,
-                name: true,
-                photo: true,
-              },
+              select: { id: true, email: true, name: true, photo: true },
             },
           },
         },
@@ -238,19 +252,12 @@ export class DemandeAdherentService {
     });
   }
 
-  // ✅ Récupérer une demande par ID
   async findOne(id: number) {
     const demande = await this.prisma.demandeAdhesion.findUnique({
       where: { id },
-      include: { 
-        documents: {
-          orderBy: { typeDocument: 'asc' },
-        },
-        adherent: {  // ✅ Pluriel si relation 1:N
-          include: {
-            user: true,
-          },
-        },
+      include: {
+        documents: { orderBy: { typeDocument: 'asc' } },
+        adherent: { include: { user: true } },
       },
     });
 
@@ -258,23 +265,14 @@ export class DemandeAdherentService {
     return demande;
   }
 
-  // ✅ Filtrer par statut
   async findByStatut(statut: StatutDemande) {
     return this.prisma.demandeAdhesion.findMany({
       where: { statut },
-      include: { 
-        documents: {
-          orderBy: { typeDocument: 'asc' },
-        },
-        adherent: {  // ✅ Pluriel si relation 1:N
+      include: {
+        documents: { orderBy: { typeDocument: 'asc' } },
+        adherent: {
           include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                name: true,
-              },
-            },
+            user: { select: { id: true, email: true, name: true } },
           },
         },
       },
@@ -282,48 +280,78 @@ export class DemandeAdherentService {
     });
   }
 
-  // ✅ Mettre à jour une demande (générique)
-  async update(id: number, updateDto: UpdateDemandeAdherentDto) {
-    const demande = await this.findOne(id);
+  // ================== MISE À JOUR / ACCEPTATION ==================
 
-    const dataToUpdate: any = { ...updateDto };
+ async update(id: number, updateDto: UpdateDemandeAdherentDto) {
+  // Optionnel : vérifier que la demande existe
+  await this.findOne(id);
 
-    // Si admin valide la demande → générer token
-    if (updateDto.statut === StatutDemande.VALIDEE && demande.statut !== StatutDemande.VALIDEE) {
-      const token = randomBytes(32).toString('hex'); // Token sécurisé
-      const expiry = new Date();
-      expiry.setDate(expiry.getDate() + 7); // Expire dans 7 jours
+  return this.prisma.demandeAdhesion.update({
+    where: { id },
+    data: updateDto,
+    include: {
+      documents: { orderBy: { typeDocument: 'asc' } },
+    },
+  });
+}
 
-      dataToUpdate.profileToken = token;
-      dataToUpdate.profileTokenExpiry = expiry;
+  // Raccourci explicite pour le bouton "Accepter"
+  // Raccourci explicite pour le bouton "Accepter"
+async accepterDemande(id: number) {
+  const demande = await this.prisma.demandeAdhesion.findUnique({
+    where: { id },
+  });
 
-      // ✅ Envoyer email avec lien de création profil
-      const profileUrl = `${process.env.FRONTEND_URL}/formulaire/adherent/profil-adherent-formulaire?token=${token}`;
-      await this.emailService.sendProfileCreationLink(demande.email, demande.nom, profileUrl);
-    }
+  if (!demande) {
+    throw new NotFoundException(`Demande adhérent #${id} introuvable`);
+  }
 
-    return this.prisma.demandeAdhesion.update({
-      where: { id },
-      data: dataToUpdate,
-      include: { 
-        documents: {
-          orderBy: { typeDocument: 'asc' },
-        },
-      },
+  if (demande.statut === StatutDemande.ACCEPTEE) {
+    throw new ConflictException('Cette demande a déjà été acceptée');
+  }
+
+  const profileToken = randomBytes(32).toString('hex');
+  const profileTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const demandeAcceptee = await this.prisma.demandeAdhesion.update({
+    where: { id },
+    data: {
+      statut: StatutDemande.ACCEPTEE,
+      profileToken,
+      profileTokenExpiry,
+    },
+  });
+
+const profileUrl = `${process.env.FRONTEND_URL}/formulaire/adherent/profil-adherent-formulaire/${profileToken}`;
+
+  try {
+    await this.emailService.sendProfileCreationLink(
+      demandeAcceptee.email,
+      demandeAcceptee.nom,
+      profileUrl,
+    );
+  } catch (error: any) {
+    console.error('Erreur envoi email adhérent:', {
+      email: demandeAcceptee.email,
+      error: error.message,
     });
   }
 
-  // ✅ Valider une demande (raccourci)
-  async valider(id: number) {
-    return this.update(id, { statut: StatutDemande.VALIDEE });
-  }
+  return {
+    success: true,
+    message: 'Demande acceptée, token généré et email envoyé.',
+    demande: demandeAcceptee,
+    profileUrl,
+  };
+}
 
-  // ✅ Refuser une demande (raccourci)
+
   async refuser(id: number) {
     return this.update(id, { statut: StatutDemande.REFUSEE });
   }
 
-  // ✅ Vérifier le token de création profil
+  // ================== VÉRIFICATION TOKEN ==================
+
   async verifyProfileToken(token: string) {
     const demande = await this.prisma.demandeAdhesion.findUnique({
       where: { profileToken: token },
@@ -333,17 +361,15 @@ export class DemandeAdherentService {
       throw new NotFoundException('Token invalide');
     }
 
-    // Vérifier expiration
     if (demande.profileTokenExpiry && demande.profileTokenExpiry < new Date()) {
       throw new BadRequestException('Token expiré');
     }
 
-    // Vérifier statut
-    if (demande.statut !== StatutDemande.VALIDEE) {
-      throw new BadRequestException('Demande non validée');
+    // cohérent avec accepterDemande : on attend ACCEPTÉE
+    if (demande.statut !== StatutDemande.ACCEPTEE) {
+      throw new BadRequestException('Demande non acceptée');
     }
 
-    // Vérifier qu'un adhérent n'existe pas déjà
     const adherent = await this.prisma.adherent.findFirst({
       where: { demandeAdhesionId: demande.id },
     });
@@ -352,7 +378,6 @@ export class DemandeAdherentService {
       throw new BadRequestException('Profil déjà créé');
     }
 
-    // Retourner les données (sans infos sensibles)
     return {
       id: demande.id,
       email: demande.email,
@@ -360,58 +385,55 @@ export class DemandeAdherentService {
       prenom: demande.prenom,
     };
   }
+
+  // ================== SUPPRESSION ==================
+
   async remove(id: number) {
-    // 1. Vérifier que la demande existe
     const demande = await this.prisma.demandeAdhesion.findUnique({
       where: { id },
-      include: { 
+      include: {
         documents: true,
-        adherent: true
-      }
+        adherent: true,
+      },
     });
 
     if (!demande) {
       throw new NotFoundException(`Demande d'adhésion #${id} introuvable`);
     }
 
-    // 2. Vérifier qu'on peut supprimer
-    if (demande.statut === StatutDemande.ACCEPTEE || demande.statut === StatutDemande.VALIDEE) {
+    if (
+      demande.statut === StatutDemande.ACCEPTEE ||
+      demande.statut === StatutDemande.VALIDEE
+    ) {
       throw new BadRequestException(
-        'Impossible de supprimer une demande acceptée/validée. Veuillez la refuser d\'abord.'
+        "Impossible de supprimer une demande acceptée/validée. Veuillez la refuser d'abord.",
       );
     }
 
-    // 3. Vérifier qu'aucun adhérent n'est lié
     if (demande.adherent && demande.adherent.length > 0) {
       throw new BadRequestException(
-        'Impossible de supprimer une demande avec un adhérent associé'
+        'Impossible de supprimer une demande avec un adhérent associé',
       );
     }
 
-    // 4. Supprimer les fichiers physiques
     const uploadDir = path.join(process.cwd(), 'uploads', 'demandes', String(id));
-    
+
     try {
-      await fs.access(uploadDir); // Vérifier si le dossier existe
+      await fs.access(uploadDir);
       await fs.rm(uploadDir, { recursive: true, force: true });
-      console.log(`✅ Fichiers supprimés: ${uploadDir}`);
-    } catch (error) {
-      console.warn(`⚠️ Dossier inexistant ou déjà supprimé: ${uploadDir}`);
-      // Ne pas bloquer si le dossier n'existe pas
+    } catch {
+      // ignore
     }
 
-    // 5. Supprimer en transaction (documents + demande)
     await this.prisma.$transaction(async (tx) => {
-      // Supprimer tous les documents liés
       if (demande.documents.length > 0) {
         await tx.document.deleteMany({
-          where: { demandeAdhesionId: id }
+          where: { demandeAdhesionId: id },
         });
       }
 
-      // Supprimer la demande
       await tx.demandeAdhesion.delete({
-        where: { id }
+        where: { id },
       });
     });
 
@@ -423,9 +445,8 @@ export class DemandeAdherentService {
         nom: demande.nom,
         prenom: demande.prenom,
         email: demande.email,
-        documentsSupprimes: demande.documents.length
-      }
+        documentsSupprimes: demande.documents.length,
+      },
     };
   }
-  
 }

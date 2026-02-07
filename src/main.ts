@@ -9,6 +9,7 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { promises as fs } from 'fs';
 import multipart, { MultipartFile } from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
 
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './filters/http-exception.filter';
@@ -21,7 +22,7 @@ async function saveFiles(demandeId: number, files: Record<string, MultipartFile[
 
     const typeDir = join(basePath, key);
     if (!existsSync(typeDir)) {
-      await fs.mkdir(typeDir, { recursive: true }); // ✅
+      await fs.mkdir(typeDir, { recursive: true });
     }
 
     for (const file of fileArray) {
@@ -52,13 +53,22 @@ async function bootstrap() {
     new FastifyAdapter(),
   );
 
+  // ✅ Servir les fichiers statiques avec cast explicite
+  const uploadsPath = join(process.cwd(), 'uploads');
+  logger.log(`📁 Uploads path: ${uploadsPath}`);
+  
+  await app.register(fastifyStatic as any, {
+    root: uploadsPath,
+    prefix: '/uploads/',
+    decorateReply: false,
+  });
+  
+  logger.log('✅ Fichiers statiques configurés sur /uploads/');
+
   // ✅ multipart plugin
   await app.register(multipart as any, {
     attachFieldsToBody: 'keyValues',
     limits: { fileSize: 10 * 1024 * 1024 },
-
-    // ✅ correction: on force la structure “fichier” attachée au body
-    // sinon tu peux te retrouver avec mimetype undefined / valeur string/buffer non conforme [web:24]
     onFile: async (part: any) => {
       part.value = {
         filename: part.filename,
@@ -67,7 +77,7 @@ async function bootstrap() {
         value: await part.toBuffer(),
       };
     },
-  }); // attachFieldsToBody:'keyValues' + onFile = recommandé par fastify-multipart [web:24]
+  });
 
   // CORS
   const isDevelopment = process.env.NODE_ENV === 'development';
@@ -145,12 +155,12 @@ async function bootstrap() {
   logger.log('========================================');
   logger.log(`🚀 Server running on http://localhost:${port}`);
   logger.log(`📚 Swagger disponible sur http://localhost:${port}/api`);
+  logger.log(`📁 Fichiers uploads: http://localhost:${port}/uploads/`);
   logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.log('========================================');
 }
 
 bootstrap().catch((err) => {
-  // eslint-disable-next-line no-console
   console.error('❌ Erreur fatale au démarrage:', err);
   process.exit(1);
 });

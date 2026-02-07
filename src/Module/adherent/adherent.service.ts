@@ -1,14 +1,13 @@
 import { Injectable, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { CreateAdherentDto } from './dto/create-adherent.dto';
-import { CreateAdherentWithTokenDto } from './dto/create-adherent-with-token.dto';
 import { UpdateAdherentDto } from './dto/update-adherent.dto';
 import * as bcrypt from 'bcrypt';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
-import { StatutDemande } from '@prisma/client';
+import { DemandeAdhesion, StatutDemande, TypePack } from '@prisma/client';
 import { EmailService } from '../email/email.service';
+import { CreateAdherentProfileDto } from './dto/create-profile-adherent.dto';
 
 interface FastifyFileKV {
   value: Buffer;
@@ -75,76 +74,61 @@ export class AdherentService {
   }
 
   // ✅ Créer un adhérent par email (ancienne méthode)
- async create(dto: CreateAdherentDto, photoFile: FastifyFileKV) {
-  const { email, motDePasse, typePack } = dto;
+  private async createProfilFromDemandeCore(
+    demande: DemandeAdhesion,
+    motDePasse: string,
+    typePack: TypePack,
+    photoFile: FastifyFileKV,
+  ) {
+    // 1) Vérifier user existant
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: demande.email },
+    });
+    if (existingUser) {
+      throw new ConflictException(
+        'Un compte utilisateur existe déjà avec cet email. Veuillez vous connecter.',
+      );
+    }
 
-  // 1. Chercher la demande validée par email
-  const demande = await this.prisma.demandeAdhesion.findUnique({
-    where: { email },
-  });
+    // 2) Vérifier adhérent existant
+    const adherentExistant = await this.prisma.adherent.findFirst({
+      where: { demandeAdhesionId: demande.id },
+    });
+    if (adherentExistant) {
+      throw new ConflictException('Un profil a déjà été créé pour cette demande');
+    }
 
-  if (!demande) {
-    throw new NotFoundException('Aucune demande trouvée pour cet email');
-  }
+    // 3) Rôle ADHERENT
+    const adherentRole = await this.prisma.role.findFirst({
+      where: { name: 'adherent' },
+    });
+    if (!adherentRole) {
+      throw new BadRequestException(
+        'Rôle ADHERENT non trouvé. Contactez l\'administrateur.',
+      );
+    }
 
-  if (demande.statut !== StatutDemande.VALIDEE) {
-    throw new BadRequestException('Votre demande n\'a pas encore été validée');
-  }
+    // 4) Photo
+    if (!photoFile) {
+      throw new BadRequestException('La photo est obligatoire');
+    }
+    const photoUrl = await this.savePhoto(demande.id, photoFile);
 
-  // 2. ✅ Vérifier si un User existe déjà avec cet email
-  const existingUser = await this.prisma.user.findUnique({
-    where: { email: demande.email },
-  });
+    // 5) Mot de passe
+    if (!motDePasse || motDePasse.length < 8) {
+      throw new BadRequestException(
+        'Le mot de passe doit contenir au moins 8 caractères',
+      );
+    }
+    const hashedPassword = await bcrypt.hash(motDePasse, 10);
 
-  if (existingUser) {
-    throw new ConflictException(
-      'Un compte utilisateur existe déjà avec cet email. Veuillez vous connecter.'
-    );
-  }
+    // 6) Expiration + cotisation
+    const dateExpiration = new Date();
+    dateExpiration.setFullYear(dateExpiration.getFullYear() + 1);
+    const montantCotisation = typePack === 'premium' ? 57.5 : 47.5;
 
-  // 3. Vérifier qu'un adhérent n'existe pas déjà pour cette demande
-  const adherentExistant = await this.prisma.adherent.findFirst({
-    where: { demandeAdhesionId: demande.id },
-  });
-
-  if (adherentExistant) {
-    throw new ConflictException('Un compte adhérent existe déjà pour cette demande');
-  }
-
-  // 4. Récupérer le rôle ADHERENT
-  const adherentRole = await this.prisma.role.findFirst({
-    where: { name: 'ADHERENT' },
-  });
-
-  if (!adherentRole) {
-    throw new BadRequestException('Rôle ADHERENT non trouvé. Contactez l\'administrateur.');
-  }
-
-  // 5. Valider et sauvegarder la photo
-  if (!photoFile) {
-    throw new BadRequestException('La photo est obligatoire');
-  }
-
-  const photoUrl = await this.savePhoto(demande.id, photoFile);
-
-  // 6. Hasher le mot de passe
-  if (!motDePasse || motDePasse.length < 8) {
-    throw new BadRequestException('Le mot de passe doit contenir au moins 8 caractères');
-  }
-
-  const hashedPassword = await bcrypt.hash(motDePasse, 10);
-
-  // 7. Calculer date d'expiration (1 an)
-  const dateExpiration = new Date();
-  dateExpiration.setFullYear(dateExpiration.getFullYear() + 1);
-
-  // 8. Calculer montant cotisation
-  const montantCotisation = typePack === 'premium' ? 57.50 : 47.50;
-
-  // 9. Créer User + Adherent en transaction
-  try {
+    // 7) Transaction User + Adherent
     const result = await this.prisma.$transaction(async (tx) => {
-      // Créer le User
       const user = await tx.user.create({
         data: {
           name: `${demande.prenom} ${demande.nom}`,
@@ -155,7 +139,6 @@ export class AdherentService {
         },
       });
 
-      // Créer l'Adherent
       const adherent = await tx.adherent.create({
         data: {
           userId: user.id,
@@ -186,194 +169,67 @@ export class AdherentService {
       return adherent;
     });
 
-    // 10. ✅ Envoyer email de bienvenue
-    try {
-      await this.emailService.sendWelcomeAdherent({
-        email: result.user.email,
-        nom: result.nom,
-        prenom: result.prenom,
-      });
-    } catch (error) {
-      console.error('❌ Erreur envoi email bienvenue:', error);
-      // Ne pas bloquer la création si l'email échoue
-    }
-
-    console.log(`✅ Adhérent créé avec succès - ID: ${result.id}, Email: ${result.user.email}`);
-
-    return {
-      success: true,
-      message: 'Compte créé avec succès',
-      adherent: result,
-    };
-  } catch (error) {
-    // ✅ Supprimer la photo si la transaction échoue
-    if (photoUrl) {
-      try {
-        await fs.unlink(path.join(process.cwd(), photoUrl));
-      } catch (err) {
-        console.error('Erreur suppression photo après échec:', err);
-      }
-    }
-    throw error;
+    return { result, photoUrl };
   }
-}
 
-// ✅ Créer un adhérent avec token sécurisé
-async createWithToken(dto: CreateAdherentWithTokenDto, photoFile: FastifyFileKV) {
-  const { token, motDePasse, typePack } = dto;
+  // ✅ Méthode publique appelée par le contrôleur (style partenaire)
+async createProfilAdherentFromToken(
+  profileToken: string,
+  code: string | undefined,
+  dto: CreateAdherentProfileDto,
+  photoFile: FastifyFileKV,
+) {
+  console.log('🔍 Recherche demande avec token:', profileToken);
 
-  // 1. Vérifier le token
+  // 1) Chercher la demande
   const demande = await this.prisma.demandeAdhesion.findUnique({
-    where: { profileToken: token },
+    where: { profileToken },
+    include: { adherent: true },
   });
+
+  console.log('📋 Demande trouvée:', demande ? {
+    id: demande.id,
+    email: demande.email,
+    statut: demande.statut,
+    profileTokenExpiry: demande.profileTokenExpiry,
+    adherentExiste: !!demande.adherent,
+  } : 'AUCUNE');
 
   if (!demande) {
-    throw new NotFoundException('Token invalide ou expiré');
+    console.error('❌ Token invalide - aucune demande trouvée');
+    throw new NotFoundException('Demande introuvable, expirée ou déjà utilisée');
   }
 
+  // 2) Vérifier expiration
   if (demande.profileTokenExpiry && demande.profileTokenExpiry < new Date()) {
-    throw new BadRequestException('Token expiré. Veuillez contacter l\'équipe.');
+    console.error('❌ Token expiré:', {
+      expiry: demande.profileTokenExpiry,
+      now: new Date(),
+    });
+    throw new BadRequestException('Token expiré');
   }
 
-  if (demande.statut !== StatutDemande.VALIDEE) {
-    throw new BadRequestException('Demande non validée');
+  // 3) Vérifier statut
+  if (demande.statut !== StatutDemande.ACCEPTEE) {
+    console.error('❌ Statut invalide:', demande.statut);
+    throw new BadRequestException(`Demande non acceptée (statut: ${demande.statut})`);
   }
 
-  // 2. ✅ Vérifier si un User existe déjà avec cet email
-  const existingUser = await this.prisma.user.findUnique({
-    where: { email: demande.email },
-  });
-
-  if (existingUser) {
-    throw new ConflictException(
-      'Un compte utilisateur existe déjà avec cet email. Veuillez vous connecter.'
-    );
-  }
-
-  // 3. Vérifier qu'un adhérent n'existe pas déjà
-  const adherentExistant = await this.prisma.adherent.findFirst({
-    where: { demandeAdhesionId: demande.id },
-  });
-
-  if (adherentExistant) {
+  // 4) Vérifier adhérent existant
+  if (demande.adherent && demande.adherent.length > 0) {
+    console.error('❌ Adhérent déjà créé');
     throw new ConflictException('Un profil a déjà été créé pour cette demande');
   }
 
-  // 4. Récupérer le rôle ADHERENT
-  const adherentRole = await this.prisma.role.findFirst({
-    where: { name: 'ADHERENT' },
-  });
+  console.log('✅ Validations OK, création du profil...');
 
-  if (!adherentRole) {
-    throw new BadRequestException('Rôle ADHERENT non trouvé. Contactez l\'administrateur.');
-  }
-
-  // 5. Valider et sauvegarder la photo
-  if (!photoFile) {
-    throw new BadRequestException('La photo est obligatoire');
-  }
-
-  const photoUrl = await this.savePhoto(demande.id, photoFile);
-
-  // 6. Hasher le mot de passe
-  if (!motDePasse || motDePasse.length < 8) {
-    throw new BadRequestException('Le mot de passe doit contenir au moins 8 caractères');
-  }
-
-  const hashedPassword = await bcrypt.hash(motDePasse, 10);
-
-  // 7. Calculer date d'expiration (1 an)
-  const dateExpiration = new Date();
-  dateExpiration.setFullYear(dateExpiration.getFullYear() + 1);
-
-  // 8. Calculer montant cotisation
-  const montantCotisation = typePack === 'premium' ? 57.50 : 47.50;
-
-  // 9. Créer User + Adherent en transaction
-  let result;
-  try {
-    result = await this.prisma.$transaction(async (tx) => {
-      // Créer le User
-      const user = await tx.user.create({
-        data: {
-          name: `${demande.prenom} ${demande.nom}`,
-          email: demande.email,
-          password: hashedPassword,
-          roleId: adherentRole.id,
-          photo: photoUrl,
-        },
-      });
-
-      // Créer l'Adherent
-      const adherent = await tx.adherent.create({
-        data: {
-          userId: user.id,
-          demandeAdhesionId: demande.id,
-          nom: demande.nom,
-          prenom: demande.prenom,
-          telephone: demande.telephone,
-          ville: demande.ville,
-          raisonSociale: demande.raisonSociale,
-          numeroKbis: demande.numeroKbis,
-          typePack,
-          photoUrl,
-          dateExpiration,
-          montantCotisation,
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              name: true,
-              photo: true,
-            },
-          },
-        },
-      });
-
-      // ✅ Invalider le token dans la même transaction
-      await tx.demandeAdhesion.update({
-        where: { id: demande.id },
-        data: { 
-          profileToken: null,
-          profileTokenExpiry: null,
-        },
-      });
-
-      return adherent;
-    });
-  } catch (error) {
-    // ✅ Supprimer la photo si la transaction échoue
-    if (photoUrl) {
-      try {
-        await fs.unlink(path.join(process.cwd(), photoUrl));
-      } catch (err) {
-        console.error('Erreur suppression photo après échec:', err);
-      }
-    }
-    throw error;
-  }
-
-  // 10. ✅ Envoyer email de bienvenue
-  try {
-    await this.emailService.sendWelcomeAdherent({
-      email: result.user.email,
-      nom: result.nom,
-      prenom: result.prenom,
-    });
-  } catch (error) {
-    console.error('❌ Erreur envoi email bienvenue:', error);
-    // Ne pas bloquer la création si l'email échoue
-  }
-
-  console.log(`✅ Adhérent créé avec succès - ID: ${result.id}, Email: ${result.user.email}`);
-
-  return {
-    success: true,
-    message: 'Compte créé avec succès',
-    adherent: result,
-  };
+  // Suite de la logique...
+  return this.createProfilFromDemandeCore(
+    demande,
+    dto.motDePasse,
+    dto.typePack,
+    photoFile,
+  );
 }
 
 
@@ -501,4 +357,40 @@ async createWithToken(dto: CreateAdherentWithTokenDto, photoFile: FastifyFileKV)
       },
     });
   }
+
+// backend/src/adherent/adherent.service.ts
+
+async findPublicByUserId(userId: number) {
+  console.log('🔍 Recherche adhérent pour userId:', userId);
+  
+  const adherent = await this.prisma.adherent.findFirst({
+    where: { userId },
+    select: {
+      nom: true,
+      prenom: true,
+      typePack: true,
+      user: { 
+        select: { 
+          email: true, 
+          photo: true 
+        } 
+      },
+    },
+  });
+
+  if (!adherent) {
+    throw new NotFoundException('Adhérent introuvable');
+  }
+
+  console.log('✅ Adhérent trouvé:', adherent.nom, adherent.prenom);
+
+  return {
+    nom: adherent.nom,
+    prenom: adherent.prenom,
+    email: adherent.user.email,
+    photo: adherent.user.photo,
+    typePack: adherent.typePack,
+  };
+}
+
 }

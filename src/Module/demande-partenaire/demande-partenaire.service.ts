@@ -18,7 +18,12 @@ import {
   ResultatRendezvous    // ✅ Ajouter si manquant
 } from '@prisma/client';
 import { EmailService } from '../email/email.service';
-
+import { AccepterDemandeDto } from './dto/accepter-demande.dto';
+import * as crypto from 'crypto';
+import * as path from 'path';
+import * as fs from 'fs/promises';
+import { v4 as uuidv4 } from 'uuid';
+import { FastifyFileKV } from '../demande/Types/types';
 @Injectable()
 export class DemandePartenaireService {
   constructor(
@@ -39,6 +44,35 @@ async create(createDto: CreateDemandePartenaireDto) {
   if (email !== confirmEmail) {
     throw new BadRequestException('Les emails ne correspondent pas');
   }
+
+  const existingAdherentDemand = await this.prisma.demandeAdhesion.findFirst({
+    where: { email },
+  });
+
+  if (existingAdherentDemand) {
+    throw new BadRequestException(
+      "Cet email est déjà utilisé pour une demande d'adhésion. Un email ne peut être associé qu'à un seul type de demande.",
+    );
+  }
+
+  // 🔹 B. Vérifier si email déjà utilisé par un Adherent (compte créé)
+  const existingAdherent = await this.prisma.adherent.findFirst({
+    where: {
+      user: {
+        email,
+      },
+    },
+    include: {
+      user: true,
+    },
+  });
+
+  if (existingAdherent) {
+    throw new BadRequestException(
+      "Cet email est déjà associé à un compte adhérent. Un email ne peut être associé qu'à un seul type de rôle.",
+    );
+  }
+
 
   // 1. Vérifier si email existe déjà avec une demande en cours
   const existingDemande = await this.prisma.demandePartenaire.findFirst({
@@ -286,7 +320,8 @@ async create(createDto: CreateDemandePartenaireDto) {
   /**
    * ✅ Accepter une demande de partenariat
    */
- async accepterDemande(id: number, profileUrl: string) {
+
+async confirmerRendezvous(id: number, profileUrl: string) {
   const demande = await this.prisma.demandePartenaire.findUnique({
     where: { id },
     include: { 
@@ -302,50 +337,272 @@ async create(createDto: CreateDemandePartenaireDto) {
     throw new NotFoundException(`Demande de partenariat #${id} introuvable`);
   }
 
-  if (demande.statutDemande === StatutDemande.ACCEPTEE) {
-    throw new ConflictException('Cette demande a déjà été acceptée');
+  // si tu ne veux plus empêcher quand c’est ACCEPTÉ, tu peux adapter cette condition
+  if (demande.statutDemande === StatutDemande.EN_COURS_TRAITEMENT) {
+    throw new ConflictException('Cette demande est déjà en cours de traitement');
   }
 
   if (!demande.rendezvous) {
     throw new BadRequestException('Aucun rendez-vous associé à cette demande');
   }
 
-  // Mettre à jour le statut
-  const demandeAcceptee = await this.prisma.demandePartenaire.update({
+  // 🔁 Mettre à jour le statut en EN_COURS_TRAITEMENT
+  const demandeMiseAJour = await this.prisma.demandePartenaire.update({
     where: { id },
     data: {
-      statutDemande: StatutDemande.ACCEPTEE
+      statutDemande: StatutDemande.EN_COURS_TRAITEMENT,
     },
     include: {
-      rendezvous: true
-    }
+      rendezvous: true,
+    },
   });
 
-  // Envoyer email de confirmation du rendez-vous avec lien profil
+  // L’email peut rester le même si ta logique métier ne change pas
   try {
     await this.emailService.sendConfirmationRendezvousPartenaire({
-      email: demandeAcceptee.email,
-      nom: demandeAcceptee.nom,
-      entite: demandeAcceptee.entite,
-      typeRdv: demandeAcceptee.rendezvous.typeRdv,
-      dateRdv: demandeAcceptee.rendezvous.dateRdv,
-      creneau: demandeAcceptee.rendezvous.creneau,
-      lienVisio: demandeAcceptee.rendezvous.lienVisio,
-      adresse: demandeAcceptee.rendezvous.adresse,
+      email: demandeMiseAJour.email,
+      nom: demandeMiseAJour.nom,
+      entite: demandeMiseAJour.entite,
+      typeRdv: demandeMiseAJour.rendezvous.typeRdv,
+      dateRdv: demandeMiseAJour.rendezvous.dateRdv,
+      creneau: demandeMiseAJour.rendezvous.creneau,
+      lienVisio: demandeMiseAJour.rendezvous.lienVisio,
+      adresse: demandeMiseAJour.rendezvous.adresse,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Erreur envoi email confirmation rendez-vous:', {
       demandeId: id,
-      email: demandeAcceptee.email,
-      error: error.message
+      email: demandeMiseAJour.email,
+      error: error.message,
     });
-    // Ne pas bloquer l'acceptation si l'email échoue
   }
 
   return {
     success: true,
-    message: 'Demande acceptée avec succès',
-    demande: demandeAcceptee
+    message: 'Demande passée en cours de traitement avec succès',
+    demande: demandeMiseAJour,
+  };
+}
+
+
+/*
+  async confirmerRendezvous(
+    id: number, 
+    lienVisio?: string, 
+    adresse?: string
+  ) {
+    const demande = await this.prisma.demandePartenaire.findUnique({
+      where: { id },
+      include: { rendezvous: true }
+    });
+
+    if (!demande) {
+      throw new NotFoundException(`Demande de partenariat #${id} introuvable`);
+    }
+
+    if (!demande.rendezvous) {
+      throw new BadRequestException('Aucun rendez-vous associé à cette demande');
+    }
+
+    // Mettre à jour le statut du rendez-vous
+    const rdvConfirme = await this.prisma.rendezvous.update({
+      where: { id: demande.rendezvous.id },
+      data: {
+        statut: StatutRendezvous.CONFIRME
+      }
+    });
+
+    // Mettre à jour le statut de la demande
+    await this.prisma.demandePartenaire.update({
+      where: { id },
+      data: {
+        statutDemande: StatutDemande.EN_COURS_TRAITEMENT
+      }
+    });
+
+    // Envoyer email de confirmation
+    try {
+      await this.emailService.sendConfirmationRendezvousPartenaire({
+        email: demande.email,
+        nom: demande.nom,
+        entite: demande.entite,
+        typeRdv: rdvConfirme.typeRdv,
+        dateRdv: rdvConfirme.dateRdv,
+        creneau: rdvConfirme.creneau,
+        lienVisio,
+        adresse
+      });
+    } catch (error) {
+      console.error('❌ Erreur envoi email confirmation RDV:', error);
+    }
+
+    return {
+      success: true,
+      message: 'Rendez-vous confirmé avec succès',
+      rendezvous: rdvConfirme
+    };
+  }
+
+  */
+
+ private generatePartnerCode(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  }
+
+  /**
+   * Sauvegarder le fichier contrat sur disque
+   */
+/**
+ * Sauvegarder le fichier contrat sur disque (Fastify)
+ */
+private async saveContratFile(
+  demandeId: number,
+  file: FastifyFileKV, // ✅ UN SEUL fichier (pas un tableau)
+): Promise<{ cheminDocument: string; nomFichier: string; tailleDocument: number }> {
+  // 1️⃣ Valider le type MIME
+  if (!file?.mimetype) {
+    throw new BadRequestException('Contrat: fichier invalide (mimetype manquant)');
+  }
+  
+  if (file.mimetype !== 'application/pdf') {
+    throw new BadRequestException(
+      `Contrat: type non autorisé (${file.mimetype}). Seul PDF est accepté.`,
+    );
+  }
+
+  // 2️⃣ Créer le répertoire pour les contrats
+  const uploadDir = path.join(
+    process.cwd(),
+    'uploads',
+    'contrats',
+    String(demandeId),
+  );
+
+  await fs.mkdir(uploadDir, { recursive: true });
+
+  // 3️⃣ Générer nom unique avec UUID
+  const uniqueName = `contrat_${uuidv4()}${path.extname(file.filename)}`;
+  const filePath = path.join(uploadDir, uniqueName);
+
+  // 4️⃣ Sauvegarder le fichier (file.value = Buffer dans Fastify)
+  await fs.writeFile(filePath, file.value);
+
+  // 5️⃣ Chemin relatif pour la DB
+  const relativePath = `/uploads/contrats/${demandeId}/${uniqueName}`;
+
+  return {
+    cheminDocument: relativePath,
+    nomFichier: file.filename, // ✅ Nom original du fichier
+    tailleDocument: file.value.length, // ✅ Taille en octets
+  };
+}
+
+ async accepterDemande(
+  id: number,
+  dto: AccepterDemandeDto,
+  contratFiles: FastifyFileKV[], // ✅ Accepte un tableau
+) {
+  // 1) Vérifier l'existence de la demande
+  const demande = await this.prisma.demandePartenaire.findUnique({
+    where: { id },
+    include: { rendezvous: true, contrat: true },
+  });
+
+  if (!demande) {
+    throw new NotFoundException(`Demande de partenariat #${id} introuvable`);
+  }
+  if (demande.statutDemande === StatutDemande.ACCEPTEE) {
+    throw new ConflictException('Cette demande a déjà été acceptée');
+  }
+  if (!demande.rendezvous) {
+    throw new BadRequestException('Aucun rendez-vous associé à cette demande');
+  }
+
+  // 2) ✅ Valider qu'on a exactement 1 fichier
+  if (!contratFiles || contratFiles.length === 0) {
+    throw new BadRequestException('Le fichier contrat est obligatoire');
+  }
+  if (contratFiles.length > 1) {
+    throw new BadRequestException('Un seul fichier contrat est autorisé');
+  }
+
+  const contratFile = contratFiles[0]; // ✅ Extraire le premier fichier
+
+  // 3) ✅ Sauvegarder le fichier contrat
+  const { cheminDocument, nomFichier, tailleDocument } = 
+    await this.saveContratFile(id, contratFile);
+
+  // 4) Génération token + code partenaire
+  const profileToken = crypto.randomBytes(32).toString('hex');
+  const profileTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const codePartenaire = this.generatePartnerCode();
+
+  // 5) Transaction DB
+  const { contrat, demandeAcceptee } = await this.prisma.$transaction(async (tx) => {
+    const contrat = await tx.contratPartenaire.create({
+      data: {
+        dateSignature: new Date(dto.dateSignature),
+        dateFinContrat: new Date(dto.dateFinContrat),
+        cheminDocument,
+        nomFichier,
+        tailleDocument,
+        notesInternes: dto.notesInternes,
+        demandePartenaireId: id,
+      },
+    });
+
+    const demandeAcceptee = await tx.demandePartenaire.update({
+      where: { id },
+      data: {
+        statutDemande: StatutDemande.ACCEPTEE,
+        profileToken,
+        profileTokenExpiry,
+        codePartenaire,
+      },
+      include: { rendezvous: true, contrat: true },
+    });
+
+    return { contrat, demandeAcceptee };
+  });
+
+  // 6) Construire l'URL du profil
+  const profileUrl = `${process.env.FRONTEND_URL}/formulaire/partenaire/inscription-formulaire/${profileToken}?code=${codePartenaire}`;
+
+  // 7) Chemin absolu pour l'email
+  const contratPath = path.join(
+    process.cwd(),
+    contrat.cheminDocument.replace(/^\//, ''),
+  );
+
+  // 8) Envoyer l'email
+  try {
+    await this.emailService.sendAcceptationPartenaireAvecProfil({
+      email: demandeAcceptee.email,
+      nom: demandeAcceptee.nom,
+      entite: demandeAcceptee.entite,
+      profileUrl,
+      dateExpiration: profileTokenExpiry,
+      dateSignatureContrat: contrat.dateSignature,
+      dateFinContrat: contrat.dateFinContrat,
+      contratPath,
+      contratName: contrat.nomFichier,
+      codePartenaire,
+    });
+  } catch (error) {
+    console.error('❌ Erreur envoi email partenaire:', {
+      email: demandeAcceptee.email,
+      error: error.message,
+    });
+  }
+
+  return {
+    success: true,
+    message: 'Demande acceptée, contrat enregistré, code généré et email envoyé.',
+    demande: demandeAcceptee,
+    contrat,
+    profileUrl,
+    codePartenaire,
   };
 }
 
@@ -579,62 +836,6 @@ async create(createDto: CreateDemandePartenaireDto) {
   /**
    * ✅ Confirmer un rendez-vous (par l'équipe commerciale)
    */
-  async confirmerRendezvous(
-    id: number, 
-    lienVisio?: string, 
-    adresse?: string
-  ) {
-    const demande = await this.prisma.demandePartenaire.findUnique({
-      where: { id },
-      include: { rendezvous: true }
-    });
-
-    if (!demande) {
-      throw new NotFoundException(`Demande de partenariat #${id} introuvable`);
-    }
-
-    if (!demande.rendezvous) {
-      throw new BadRequestException('Aucun rendez-vous associé à cette demande');
-    }
-
-    // Mettre à jour le statut du rendez-vous
-    const rdvConfirme = await this.prisma.rendezvous.update({
-      where: { id: demande.rendezvous.id },
-      data: {
-        statut: StatutRendezvous.CONFIRME
-      }
-    });
-
-    // Mettre à jour le statut de la demande
-    await this.prisma.demandePartenaire.update({
-      where: { id },
-      data: {
-        statutDemande: StatutDemande.EN_COURS_TRAITEMENT
-      }
-    });
-
-    // Envoyer email de confirmation
-    try {
-      await this.emailService.sendConfirmationRendezvousPartenaire({
-        email: demande.email,
-        nom: demande.nom,
-        entite: demande.entite,
-        typeRdv: rdvConfirme.typeRdv,
-        dateRdv: rdvConfirme.dateRdv,
-        creneau: rdvConfirme.creneau,
-        lienVisio,
-        adresse
-      });
-    } catch (error) {
-      console.error('❌ Erreur envoi email confirmation RDV:', error);
-    }
-
-    return {
-      success: true,
-      message: 'Rendez-vous confirmé avec succès',
-      rendezvous: rdvConfirme
-    };
-  }
 
   /**
    * 📊 Statistiques des demandes partenaires

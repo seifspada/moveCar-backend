@@ -51,76 +51,93 @@ export class AuthService {
   }
 
   // ✅ Login - Avec support adherent
-  async login(loginDto: LoginDto) {
-    console.log('🔍 Tentative de login pour:', loginDto.email);
+// auth.service.ts
 
-    // Trouver l'utilisateur avec son adherent (si existe)
-    const user = await this.prisma.user.findUnique({
-      where: { email: loginDto.email },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        password: true,
-        roleId: true,
-        photo: true,
-        role: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        adherent: {
-          select: {
-            id: true,
-            nom: true,
-            prenom: true,
-            numeroAdherent: true,
-            dateNaissance: true,
-            telephone: true,
-            adresse: true,
-            codePostal: true,
-            ville: true,
-            photoUrl: true,
-          },
+async login(loginDto: LoginDto) {
+  console.log('🔍 Tentative de login pour:', loginDto.email);
+
+  const user = await this.prisma.user.findUnique({
+    where: { email: loginDto.email },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      password: true,
+      roleId: true,
+      photo: true,
+      role: {
+        select: {
+          id: true,
+          name: true,
         },
       },
-    });
+      adherent: {
+        select: {
+          id: true,
+          nom: true,
+          prenom: true,
+          numeroAdherent: true,
+          dateNaissance: true,
+          telephone: true,
+          adresse: true,
+          codePostal: true,
+          ville: true,
+          photoUrl: true,
+        },
+      },
+      // 🔹 AJOUT : relation partenaire
+      partenaire: {
+        select: {
+          id: true,
+          nom: true,
+          entite: true,
+          email: true,
+          telephone: true,
+          codePartenaire: true,
+          estActif: true,
+        },
+      },
+    },
+  });
 
-    if (!user) {
-      console.log('❌ Utilisateur non trouvé');
-      throw new UnauthorizedException('Email ou mot de passe incorrect');
-    }
-
-    console.log('✅ Utilisateur trouvé:', user.email);
-
-    // Vérifier le mot de passe
-    const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
-
-    if (!isPasswordValid) {
-      console.log('❌ Mot de passe invalide');
-      throw new UnauthorizedException('Email ou mot de passe incorrect');
-    }
-
-    console.log('✅ Login réussi pour:', user.email);
-
-    // Générer le token JWT
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      roleId: user.roleId,
-      adherentId: user.adherent?.id, // Inclure l'adherentId si existe
-    };
-    const accessToken = this.jwtService.sign(payload);
-
-    // Retourner l'utilisateur sans le mot de passe
-    const { password, ...userWithoutPassword } = user;
-
-    return {
-      user: userWithoutPassword,
-      accessToken,
-    };
+  if (!user) {
+    console.log('❌ Utilisateur non trouvé');
+    throw new UnauthorizedException('Email ou mot de passe incorrect');
   }
+
+  console.log('✅ Utilisateur trouvé:', user.email);
+
+  const isPasswordValid = await bcrypt.compare(
+    loginDto.password,
+    user.password,
+  );
+
+  if (!isPasswordValid) {
+    console.log('❌ Mot de passe invalide');
+    throw new UnauthorizedException('Email ou mot de passe incorrect');
+  }
+
+  console.log('✅ Login réussi pour:', user.email);
+
+  // 🔹 Payload JWT avec adherentId et partenaireId
+  const payload = {
+    sub: user.id,
+    email: user.email,
+    roleId: user.roleId,
+    adherentId: user.adherent?.id || null,
+    partenaireId: user.partenaire?.id || null,
+  };
+
+  const accessToken = this.jwtService.sign(payload);
+
+  const { password, ...userWithoutPassword } = user;
+
+  return {
+    user: userWithoutPassword,
+    accessToken,
+  };
+}
+
 
   // ✅ ValidateUser - Avec support adherent
   async validateUser(userId: number) {

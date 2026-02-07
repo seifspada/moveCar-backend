@@ -17,7 +17,7 @@ import { StatutDemande } from '@prisma/client';
 
 import { CreateDemandeAdherentDto } from './Dto/create-demande-adherent.dto';
 import { DemandeAdherentService } from './demande-adherent.service';
-import {  DemandeAdherentFiles, FastifyFileKV } from './Types/types';
+import { DemandeAdherentFiles, FastifyFileKV } from './Types/types';
 import { UpdateDemandeAdherentDto } from './Dto/update-demande-adherent.dto';
 
 @ApiTags('demandes-adherents')
@@ -46,7 +46,7 @@ export class DemandeAdherentController {
       carteGrisWgarage: toArray(body.carteGrisWgarage),
     };
 
-    // ✅ règles: 2 fichiers
+    // règles basiques (redondantes mais ok, tu peux les enlever car validateAllFiles les refait)
     if ((files.carteIdentite?.length ?? 0) !== 2) {
       throw new BadRequestException('carteIdentite doit contenir exactement 2 fichiers');
     }
@@ -54,7 +54,6 @@ export class DemandeAdherentController {
       throw new BadRequestException('permisRectoVerso doit contenir exactement 2 fichiers');
     }
 
-    // ✅ règles: 1 fichier max
     const singles: (keyof DemandeAdherentFiles)[] = [
       'kbis',
       'rib',
@@ -72,23 +71,19 @@ export class DemandeAdherentController {
     return this.demandeService.create(dto, files);
   }
 
-
-@Get()
-@ApiOperation({ summary: 'Récupérer toutes les demandes (avec filtre optionnel par statut)' })
-findAll(@Query('statut') statut?: StatutDemande) {
-  return statut 
-    ? this.demandeService.findByStatut(statut) 
-    : this.demandeService.findAll();
-}
-
-
+  @Get()
+  @ApiOperation({
+    summary: 'Récupérer toutes les demandes (avec filtre optionnel par statut)',
+  })
+  findAll(@Query('statut') statut?: StatutDemande) {
+    return statut ? this.demandeService.findByStatut(statut) : this.demandeService.findAll();
+  }
 
   @Get('verify-token/:token')
   @ApiOperation({ summary: 'Vérifier le token de création profil' })
   async verifyToken(@Param('token') token: string) {
     return this.demandeService.verifyProfileToken(token);
   }
-
 
   @Get(':id')
   @ApiOperation({ summary: 'Récupérer une demande par ID' })
@@ -98,14 +93,20 @@ findAll(@Query('statut') statut?: StatutDemande) {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Mettre à jour une demande (statut, etc.)' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() updateDto: UpdateDemandeAdherentDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateDto: UpdateDemandeAdherentDto,
+  ) {
     return this.demandeService.update(id, updateDto);
   }
 
-  @Patch(':id/valider')
-  @ApiOperation({ summary: 'Valider une demande (génère token + envoie email)' })
-  valider(@Param('id', ParseIntPipe) id: number) {
-    return this.demandeService.valider(id);
+  @Patch(':id/accepter')
+  @ApiOperation({ summary: 'Accepter une demande adhérent (génère token + envoie email)' })
+  @ApiResponse({ status: 200, description: 'Demande acceptée avec succès' })
+  @ApiResponse({ status: 404, description: 'Demande non trouvée' })
+  @ApiResponse({ status: 409, description: 'Demande déjà acceptée' })
+  async accepterDemandeAdherent(@Param('id', ParseIntPipe) id: number) {
+    return this.demandeService.accepterDemande(id);
   }
 
   @Patch(':id/refuser')
@@ -113,8 +114,9 @@ findAll(@Query('statut') statut?: StatutDemande) {
   refuser(@Param('id', ParseIntPipe) id: number) {
     return this.demandeService.refuser(id);
   }
-   @Delete(':id')
-  @ApiOperation({ summary: 'Supprimer une demande d\'adhésion' })
+
+  @Delete(':id')
+  @ApiOperation({ summary: "Supprimer une demande d'adhésion" })
   @ApiResponse({ status: 200, description: 'Demande supprimée avec succès' })
   @ApiResponse({ status: 404, description: 'Demande introuvable' })
   @ApiResponse({ status: 400, description: 'Impossible de supprimer cette demande' })

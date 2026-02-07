@@ -53,11 +53,13 @@ export class CreateDemandeAdherentDto {
   adresse: string;
 
 
-  @ApiProperty({ example: '0612345678' })
-  @IsNotEmpty({ message: 'Le téléphone est obligatoire' })
-  @Matches(/^0[1-9]\d{8}$/, { message: 'Numéro de téléphone invalide' })
-  telephone: string;
-
+@ApiProperty({ example: '+3361234567' })
+@IsNotEmpty({ message: 'Le téléphone est obligatoire' })
+@Matches(/^((\+33|0033)[1-9]\d{8}|0[1-9]\d{8})$/, {
+  message:
+    'Numéro de téléphone invalide (format attendu : 0XXXXXXXXX ou +33XXXXXXXXX)',
+})
+telephone: string;
 
   @ApiProperty({ example: 'Garage Auto Express SARL' })
   @IsNotEmpty({ message: 'La raison sociale est obligatoire' })

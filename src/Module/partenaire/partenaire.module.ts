@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { PartenaireService } from './partenaire.service';
 import { PartenaireController } from './partenaire.controller';
+import { PartenaireService } from './partenaire.service';
+
 
 @Module({
   controllers: [PartenaireController],

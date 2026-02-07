@@ -34,15 +34,14 @@ export class CreateDemandePartenaireDto {
   @IsEnum(StatutEntreprise, { message: 'Statut invalide' })
   statut: StatutEntreprise;
 
-  @ApiProperty({ example: '+33612345678' })
-  @IsNotEmpty({ message: 'Le téléphone est obligatoire' })
-  @IsString()
-  @Matches(/^(\+\d{1,3}[- ]?)?\d{8,14}$/, {
-    message: 'Format de téléphone invalide'
-  })
-  @Transform(({ value }) => value?.replace(/\s+/g, ''))
-  @MaxLength(20)
-  telephone: string;
+@ApiProperty({ example: '+3361234567' })
+@IsNotEmpty({ message: 'Le téléphone est obligatoire' })
+@Matches(/^((\+33|0033)[1-9]\d{8}|0[1-9]\d{8})$/, {
+  message:
+    'Numéro de téléphone invalide (format attendu : 0XXXXXXXXX ou +33XXXXXXXXX)',
+})
+telephone: string;
+
 
   @ApiProperty({ example: 'contact@transport-express.fr' })
   @IsNotEmpty({ message: "L'email est obligatoire" })

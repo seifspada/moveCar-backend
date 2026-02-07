@@ -106,7 +106,7 @@ async sendDemandeRecueAdherent(data: {
           <h3 style="color: #ea580c; margin-top: 0; font-size: 18px;">
             📋 Prochaines étapes
           </h3>
-          <ol style="color: #1f2937; line-height: 1.8; margin: 10px 0; padding-left: 20px; font-size: 15px;">
+          <ol style="color: #000000; line-height: 1.8; margin: 10px 0; padding-left: 20px; font-size: 15px;">
             <li>Notre équipe va <strong>examiner votre demande</strong></li>
             <li>Vous recevrez un <strong>email de confirmation</strong> sous 24-48h</li>
             <li>Activation de votre compte et <strong>accès à la plateforme</strong></li>
@@ -794,94 +794,102 @@ async sendConfirmationRendezvousPartenaire(data: {
   });
 }
 
-/**
- * 📧 Email partenaire: validation et lien création profil
- */
-async sendPartenaireValidationLink(
-  email: string, 
-  nom: string, 
-  entite: string,
-  profileUrl: string
-) {
-  const subject = '✅ Partenariat validé - Créez votre compte';
-  
-  const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-      <div style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0; font-size: 28px;">🎉 Bienvenue chez Revolution !</h1>
-      </div>
-      
-      <div style="background-color: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none;">
-        <h2 style="color: #16a34a; margin-top: 0;">Félicitations ${nom} !</h2>
-        
-        <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-          Nous sommes ravis de vous annoncer que votre partenariat avec <strong>Revolution</strong> 
-          est officiellement <strong style="color: #16a34a;">validé</strong> ! 🎊
-        </p>
 
-        <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-          Votre entreprise <strong>${entite}</strong> rejoint notre réseau de partenaires de confiance.
-        </p>
-        
-        <div style="background-color: #f0fdf4; border: 2px solid #16a34a; padding: 20px; margin: 25px 0; border-radius: 8px;">
-          <p style="margin: 0 0 15px 0; color: #15803d; font-size: 16px;">
-            <strong>🚀 Prochaine étape :</strong> Créez votre compte partenaire
-          </p>
-          <div style="text-align: center; margin: 20px 0;">
-            <a href="${profileUrl}" 
-               style="background-color: #ea580c; color: white; padding: 15px 35px; text-decoration: none; border-radius: 25px; font-weight: bold; display: inline-block; box-shadow: 0 4px 6px rgba(234, 88, 12, 0.3); font-size: 16px;">
-              🔐 Créer mon compte partenaire
-            </a>
+
+async sendAcceptationPartenaireAvecProfil(data: {
+  email: string;
+  nom: string;
+  entite: string;
+  profileUrl: string;
+  dateExpiration: Date;
+  dateSignatureContrat: Date;
+  dateFinContrat: Date;
+  contratPath: string;
+  contratName: string;
+  codePartenaire: string;
+}) {
+  const subject = '🎉 Votre partenariat est accepté';
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #4CAF50; color: white; padding: 20px; text-align: center; }
+        .content { padding: 30px; background: #f9f9f9; }
+        .button { display: inline-block; padding: 12px 30px; background: #4CAF50; color: white !important; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+        .info-box { background: white; padding: 15px; margin: 15px 0; border-left: 4px solid #4CAF50; }
+        .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+        .code { font-size: 20px; font-weight: bold; letter-spacing: 3px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🎉 Félicitations ${data.nom}</h1>
+        </div>
+
+        <div class="content">
+          <p>Votre demande de partenariat pour <strong>${data.entite}</strong> a été acceptée.</p>
+
+          <div class="info-box">
+            <h3>🔐 Votre code partenaire</h3>
+            <p>Veuillez conserver ce code, il pourra être utilisé pour votre identification ou pour des opérations spécifiques :</p>
+            <p class="code">${data.codePartenaire}</p>
           </div>
-        </div>
-        
-        <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 25px 0; border-radius: 5px;">
-          <p style="margin: 0; color: #991b1b; font-size: 14px;">
-            ⏰ <strong>Important :</strong> Ce lien est valide pendant <strong>7 jours</strong>. 
-            Après ce délai, vous devrez contacter notre support.
+
+          <div class="info-box">
+            <h3>📄 Contrat de partenariat</h3>
+            <p>
+              Date de signature : ${new Date(data.dateSignatureContrat).toLocaleDateString('fr-FR')}<br/>
+              Date de fin : ${new Date(data.dateFinContrat).toLocaleDateString('fr-FR')}
+            </p>
+            <p>Le contrat est joint à cet email au format PDF.</p>
+          </div>
+
+          <h3>👤 Créez votre profil partenaire</h3>
+          <p>Pour accéder à votre espace partenaire, cliquez sur le bouton ci-dessous :</p>
+
+          <div style="text-align: center;">
+            <a href="${data.profileUrl}" class="button">Créer mon profil partenaire</a>
+          </div>
+
+          <p style="color: #e74c3c; font-weight: bold;">
+            Ce lien est valable jusqu'au ${data.dateExpiration.toLocaleDateString('fr-FR')} à
+            ${data.dateExpiration.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.
           </p>
+
+          <p>Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :</p>
+          <p style="word-break: break-all; font-size: 12px; color: #666;">${data.profileUrl}</p>
         </div>
-        
-        <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; margin: 25px 0;">
-          <p style="margin: 0 0 10px 0; color: #1f2937; font-weight: bold;">
-            Une fois votre compte créé, vous pourrez :
-          </p>
-          <ul style="color: #4b5563; line-height: 1.8; margin: 10px 0; padding-left: 20px;">
-            <li>Recevoir et gérer les missions de transport</li>
-            <li>Consulter votre historique d'activité</li>
-            <li>Gérer vos documents et certifications</li>
-            <li>Accéder à votre tableau de bord partenaire</li>
-          </ul>
+
+        <div class="footer">
+          <p>Cet email est automatique, merci de ne pas y répondre.</p>
+          <p>&copy; ${new Date().getFullYear()} Votre Entreprise.</p>
         </div>
-        
-        <p style="color: #6b7280; font-size: 14px; margin-top: 25px; line-height: 1.6;">
-          Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>
-          <a href="${profileUrl}" style="color: #3b82f6; word-break: break-all;">${profileUrl}</a>
-        </p>
-        
-        <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
-        
-        <p style="font-size: 16px; color: #374151;">
-          Bienvenue dans l'équipe !<br>
-          <strong style="color: #ea580c;">L'équipe Revolution</strong>
-        </p>
       </div>
-      
-      <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 10px 10px;">
-        <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-          Cet email a été envoyé automatiquement, merci de ne pas y répondre.
-        </p>
-      </div>
-    </div>
+    </body>
+    </html>
   `;
 
-  return this.sendMail({
-    to: email,
+  await this.transporter.sendMail({
+    from: process.env.SMTP_FROM,
+    to: data.email,
     subject,
     html,
-    text: `Félicitations ${nom} ! Votre partenariat est validé. Créez votre compte : ${profileUrl}`
+    attachments: [
+      {
+        filename: data.contratName,
+        path: data.contratPath,
+        contentType: 'application/pdf',
+      },
+    ],
   });
 }
+
 
 /**
  * ❌ Email partenaire: demande refusée

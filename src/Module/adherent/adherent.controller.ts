@@ -8,12 +8,12 @@ import {
   ParseIntPipe, 
   BadRequestException, 
   Get,
-  Delete // ✅ Ajouter pour la suppression
+  Delete, // ✅ Ajouter pour la suppression
+  Query
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiConsumes, ApiResponse } from '@nestjs/swagger';
 import { AdherentService } from './adherent.service';
-import { CreateAdherentDto } from './dto/create-adherent.dto';
-import { CreateAdherentWithTokenDto } from './dto/create-adherent-with-token.dto';
+import {  CreateAdherentProfileDto } from './dto/create-profile-adherent.dto';
 import { UpdateAdherentDto } from './dto/update-adherent.dto';
 import { FastifyRequest } from 'fastify';
 
@@ -28,62 +28,45 @@ interface FastifyFileKV {
 export class AdherentController {
   constructor(private readonly adherentService: AdherentService) {}
 
-  // ✅ Route 1 : Créer avec token (SPÉCIFIQUE EN PREMIER)
-  @Post('create-with-token')
-  @ApiOperation({ summary: 'Créer un adhérent avec token sécurisé' })
-  @ApiConsumes('multipart/form-data')
-  @ApiResponse({ status: 201, description: 'Adhérent créé avec succès' })
-  @ApiResponse({ status: 400, description: 'Token invalide ou données incorrectes' })
-  @ApiResponse({ status: 404, description: 'Token introuvable' })
-  async createWithToken(@Req() req: FastifyRequest, @Body() dto: CreateAdherentWithTokenDto) {
-    const body: any = req.body;
+// adherent.controller.ts
+@Post('creer-profil/:profileToken')
+@ApiOperation({ summary: 'Créer un profil adhérent à partir d’une demande validée' })
+@ApiConsumes('multipart/form-data')
+@ApiResponse({ status: 201, description: 'Adhérent créé avec succès' })
+@ApiResponse({ status: 400, description: 'Données incorrectes ou demande non valide' })
+@ApiResponse({ status: 404, description: 'Demande introuvable ou expirée' })
+async createProfilAdherent(
+  @Param('profileToken') profileToken: string,
+  @Query('code') code: string, // optionnel, si tu ajoutes un code sur la demande
+  @Req() req: FastifyRequest,
+  @Body() dto: CreateAdherentProfileDto,
+) {
+  const body: any = req.body;
 
-    // Extraire la photo
-    let photoFile: FastifyFileKV | undefined;
-    
-    if (body.photo) {
-      if (Array.isArray(body.photo)) {
-        if (body.photo.length > 1) {
-          throw new BadRequestException('photo doit contenir 1 seul fichier');
-        }
-        photoFile = body.photo[0];
-      } else {
-        photoFile = body.photo;
+  let photoFile: FastifyFileKV | undefined;
+  if (body.photo) {
+    if (Array.isArray(body.photo)) {
+      if (body.photo.length > 1) {
+        throw new BadRequestException('photo doit contenir 1 seul fichier');
       }
+      photoFile = body.photo[0];
+    } else {
+      photoFile = body.photo;
     }
-
-    if (!photoFile) {
-      throw new BadRequestException('La photo est obligatoire');
-    }
-
-    return this.adherentService.createWithToken(dto, photoFile);
   }
 
-  // ✅ Route 2 : Créer sans token (GÉNÉRIQUE APRÈS)
-  @Post()
-  @ApiOperation({ summary: 'Créer un adhérent par email (ancienne méthode)' })
-  @ApiConsumes('multipart/form-data')
-  @ApiResponse({ status: 201, description: 'Adhérent créé avec succès' })
-  @ApiResponse({ status: 400, description: 'Données incorrectes' })
-  async create(@Req() req: FastifyRequest, @Body() dto: CreateAdherentDto) {
-    const body: any = req.body;
-
-    let photoFile: FastifyFileKV | undefined;
-    
-    if (body.photo) {
-      if (Array.isArray(body.photo)) {
-        photoFile = body.photo[0];
-      } else {
-        photoFile = body.photo;
-      }
-    }
-
-    if (!photoFile) {
-      throw new BadRequestException('La photo est obligatoire');
-    }
-
-    return this.adherentService.create(dto, photoFile);
+  if (!photoFile) {
+    throw new BadRequestException('La photo est obligatoire');
   }
+
+  return this.adherentService.createProfilAdherentFromToken(
+    profileToken,
+    code,
+    dto,
+    photoFile,
+  );
+}
+
 
   // ✅ Route 3 : Liste des adhérents
   @Get()

@@ -12,14 +12,19 @@ import {
   Query,
   HttpCode,
   HttpStatus,
-  Delete
+  Delete,
+  BadRequestException,
+  Req
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam, ApiConsumes } from '@nestjs/swagger';
 import { DemandePartenaireService } from './demande-partenaire.service';
 import { CreateDemandePartenaireDto } from './dto/create-demande-partenaire.dto';
 import { StatutDemande } from '@prisma/client';
 import { BloquerDateDto } from './dto/bloquer-date.dto';
 import { DebloquerDateDto } from './dto/debloquer-date.dto';
+import { AccepterDemandeDto } from './dto/accepter-demande.dto';
+import { FastifyRequest } from 'fastify';
+import { FastifyFileKV } from '../demande/Types/types';
 
 @ApiTags('Demandes Partenaire')
 @Controller('demandes-partenaire')
@@ -114,17 +119,50 @@ export class DemandePartenaireController {
   // ✅ VALIDATION DE DEMANDE (ADMIN)
   // ==========================================
 
-  @Patch(':id/accepter')
+    @Patch(':id/confirmer-rdv')
   @ApiOperation({ summary: 'Accepter une demande de partenariat' })
   @ApiResponse({ status: 200, description: 'Demande acceptée avec succès' })
   @ApiResponse({ status: 404, description: 'Demande introuvable' })
   @ApiResponse({ status: 409, description: 'Demande déjà traitée' })
-  accepterDemande(
+  confirmerRendezvous(
     @Param('id', ParseIntPipe) id: number,
     @Body('profileUrl') profileUrl: string
   ) {
-    return this.demandePartenaireService.accepterDemande(id, profileUrl);
+    return this.demandePartenaireService.confirmerRendezvous(id, profileUrl);
   }
+
+  @Patch(':id/accepter')
+  @ApiOperation({ summary: 'Accepter une demande partenaire avec upload du contrat' })
+  @ApiConsumes('multipart/form-data') // ✅ Permet l'upload de fichiers
+  @ApiResponse({ status: 200, description: 'Demande acceptée avec succès' })
+  @ApiResponse({ status: 404, description: 'Demande non trouvée' })
+  @ApiResponse({ status: 409, description: 'Demande déjà acceptée' })
+  @ApiResponse({ status: 400, description: 'Fichier contrat manquant ou invalide' })
+  async accepterDemande(
+    @Req() req: FastifyRequest, // ✅ Accès à la requête Fastify brute
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AccepterDemandeDto,
+  ) {
+    const body: any = req.body;
+
+    // ✅ Extraire le fichier contrat (peut être un objet unique ou un tableau)
+    const toArray = (v: FastifyFileKV | FastifyFileKV[] | undefined): FastifyFileKV[] =>
+      Array.isArray(v) ? v : v ? [v] : [];
+
+    const contratFiles = toArray(body.contrat);
+
+    // ✅ Validation : exactement 1 fichier contrat
+    if (contratFiles.length === 0) {
+      throw new BadRequestException('Le fichier contrat est obligatoire');
+    }
+    if (contratFiles.length > 1) {
+      throw new BadRequestException('Un seul fichier contrat est autorisé');
+    }
+
+    // ✅ Appeler le service avec le fichier
+    return this.demandePartenaireService.accepterDemande(id, dto, contratFiles);
+  }
+
 
   @Patch(':id/refuser')
   @ApiOperation({ summary: 'Refuser une demande de partenariat' })
@@ -141,21 +179,8 @@ export class DemandePartenaireController {
   // 📅 CONFIRMATION DE RENDEZ-VOUS (ADMIN)
   // ==========================================
 
-  @Patch(':id/confirmer-rdv')
-  @ApiOperation({ summary: 'Confirmer un rendez-vous' })
-  @ApiResponse({ status: 200, description: 'Rendez-vous confirmé' })
-  @ApiResponse({ status: 404, description: 'Demande introuvable' })
-  @ApiResponse({ status: 400, description: 'Pas de rendez-vous associé' })
-  confirmerRendezvous(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() data: { lienVisio?: string; adresse?: string }
-  ) {
-    return this.demandePartenaireService.confirmerRendezvous(
-      id,
-      data.lienVisio,
-      data.adresse
-    );
-  }
+
+
 
   // ==========================================
   // 🚫 GESTION DES DATES BLOQUÉES (ADMIN)
