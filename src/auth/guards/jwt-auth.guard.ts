@@ -1,24 +1,36 @@
-import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+// src/auth/guards/jwt-auth.guard.ts
+import {
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { GqlExecutionContext } from '@nestjs/graphql';
 import { AuthGuard } from '@nestjs/passport';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  // ✅ Override pour GraphQL
+
   getRequest(context: ExecutionContext) {
-    const ctx = GqlExecutionContext.create(context);
-    return ctx.getContext().req;
+    // ✅ Détecter proprement le type de contexte
+    if (context.getType<string>() === 'graphql') {
+      // Contexte GraphQL
+      const gqlCtx = GqlExecutionContext.create(context);
+      return gqlCtx.getContext().req;
+    }
+
+    // Contexte REST (Fastify)
+    return context.switchToHttp().getRequest();
   }
-  
-  // ✅ Ne pas utiliser response ici
+
   canActivate(context: ExecutionContext) {
     return super.canActivate(context);
   }
-  
-  // ✅ Gestion des erreurs sans response.status()
+
   handleRequest(err: any, user: any, info: any) {
     if (err || !user) {
-      throw err || new UnauthorizedException('Non authentifié');
+      throw err || new UnauthorizedException(
+        info?.message || 'Non authentifié'
+      );
     }
     return user;
   }

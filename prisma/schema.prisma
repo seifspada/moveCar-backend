@@ -82,6 +82,19 @@ enum TypeReservation {
   @@map("type_reservation")
 }
 
+enum StatutReservation {
+  EN_ATTENTE    // Adhérent a réservé, attend validation
+  CONFIRMEE     // Réservation validée
+  REFUSEE       // Réservation refusée
+  ANNULEE       // Annulée par adhérent ou partenaire
+  TERMINEE      // Mission terminée
+}
+
+enum TypeAlerte {
+  GEOGRAPHIQUE  // Type 1 : 1 Ville + Rayon
+  TRAJET        // Type 2 : 2 Villes + Rayon commun
+}
+
 // ==================== UTILISATEURS SYSTÈME ====================
 
 model Role {
@@ -98,7 +111,7 @@ model User {
   id                   Int       @id @default(autoincrement())
   name                 String    @db.VarChar(100)
   email                String    @unique @db.VarChar(255)
-  password             String
+  password             String?
   photo                String?   @default("/default-avatar.png")
   roleId               Int
   role                 Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -106,15 +119,41 @@ model User {
   resetPasswordExpires DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
+  isActive Boolean  @default(true) 
 
   adherent   Adherent?
   partenaire Partenaire?
+  agent      Agent?
+  admin      Admin?      
+
+
+  alertes           AlerteGeographique[]
+
 
   @@index([roleId])
   @@index([email])
   @@map("users")
 }
 
+model Admin {
+  id        Int      @id @default(autoincrement())
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nom      String  @db.VarChar(100)
+  email    String  @unique @db.VarChar(255)
+  password String
+
+
+
+  @@index([userId])
+  @@index([email])
+  @@map("admins")
+}
 // ==================== DEMANDES D'ADHÉSION ====================
 
 model DemandeAdhesion {
@@ -134,10 +173,11 @@ model DemandeAdhesion {
   numeroKbis    String @db.VarChar(50)
 
   profileToken       String?   @unique
-  profileTokenExpiry DateTime? // Expiration 7 jours
+  profileTokenExpiry DateTime?
 
   // Gestion du statut
-  statut StatutDemande @default(EN_ATTENTE)
+  statut     StatutDemande @default(EN_ATTENTE)
+  motifRefus String?       @db.Text  // ✅ AJOUTER ICI
 
   // Traçabilité
   dateCreation     DateTime @default(now())
@@ -194,6 +234,8 @@ model Adherent {
   demandeAdhesionId Int
   demandeAdhesion   DemandeAdhesion @relation(fields: [demandeAdhesionId], references: [id], onDelete: Restrict)
 
+  reservations ReservationMission[]
+
   // Traçabilité
   dateCreation     DateTime @default(now())
   dateModification DateTime @updatedAt
@@ -214,19 +256,18 @@ model Document {
   typeDocument TypeDocument
   numero       String?      @db.VarChar(100)
 
-  dateDelivrance    DateTime? @db.Date
   dateDebutValidite DateTime? @db.Date
   dateFinValidite   DateTime? @db.Date
 
-  montant Decimal? @db.Decimal(10, 2)
+  statut StatutDocument?
 
-  cheminFichier String @db.VarChar(500)
+  fichiers FichierDocument[]
 
-  // Relations conditionnelles
+  // Relations
   demandeAdhesionId Int?
   demandeAdhesion   DemandeAdhesion? @relation(fields: [demandeAdhesionId], references: [id], onDelete: Cascade)
 
-  missionId String? // ✅ Changer Int? en String?
+  missionId String?
   mission   Mission? @relation(fields: [missionId], references: [id], onDelete: Cascade)
 
   dateCreation     DateTime @default(now())
@@ -237,6 +278,22 @@ model Document {
   @@index([typeDocument])
   @@map("documents")
 }
+
+model FichierDocument {
+  id            Int    @id @default(autoincrement())
+  cheminFichier String @db.VarChar(500)
+
+  documentId Int
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([documentId])
+  @@map("fichiers_documents")
+}
+
+
 
 // ==================== ADHÉRENTS ====================
 
@@ -290,30 +347,43 @@ model Partenaire {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Informations de base
-  nom       String @db.VarChar(100)
-  entite    String @db.VarChar(150)
-  email     String @unique @db.VarChar(255)
-  telephone String @db.VarChar(20)
+  nom          String  @db.VarChar(100)
+  prenom       String  @db.VarChar(100)
+  entiteGroupe String  @db.VarChar(150)
+  entiteAgence String  @db.VarChar(150)
+  email        String  @unique @db.VarChar(255)
+  telephone    String  @db.VarChar(20)
 
-  // Statut
-  estActif Boolean @default(true)
+  adresseAgence String? @db.VarChar(255)
+  ville         String? @db.VarChar(100)
+  logo          String? @db.VarChar(255)
+  photoUrl      String? @db.VarChar(500)  // ✅ AJOUTÉ
 
-  // Relation 1‑1 inverse vers la demande initiale
-  demandeInitiale DemandePartenaire? @relation("DemandeToPartenaire")
+
+  estActif Boolean @default(false)
 
   codePartenaire String? @unique
 
-  // Authentification
-  userId    Int?       @unique
-  user      User?      @relation(fields: [userId], references: [id])
+  profileToken          String?   @unique
+  profileTokenExpiresAt DateTime?
+  isProfileCompleted    Boolean   @default(false)
+
+  demandeInitiale DemandePartenaire? @relation("DemandeToPartenaire")
+
+  userId    Int?    @unique
+  user      User?   @relation(fields: [userId], references: [id], onDelete: Cascade) // ✅ User?
+
   vehicules Vehicule[]
   missions  Mission[]
+  agences   Agence[]
+  agents    Agent[]
 
   @@index([email])
   @@index([estActif])
   @@map("partenaires")
 }
+
+
 
 model Rendezvous {
   id        Int      @id @default(autoincrement())
@@ -409,6 +479,12 @@ model ContratPartenaire {
   nomFichier     String @db.VarChar(255)
   tailleDocument Int?
 
+  // Tarification contractuelle ✅
+  prixParKm               Float?  // €/km
+  depassementKilometrage  Float?  // km autorisés avant surcoût
+  retardSansAvertissement Float?  // €/heure de retard non signalé
+  restitutionAutreEndroit Float?  // €/heure pour restitution hors lieu prévu
+
   // Relation avec la demande
   demandePartenaireId Int               @unique
   demandePartenaire   DemandePartenaire @relation(fields: [demandePartenaireId], references: [id], onDelete: Cascade)
@@ -473,11 +549,13 @@ enum TypeLieu {
 }
 
 enum StatutMission {
-  EN_ATTENTE
-  VALIDEE
-  ANNULEE
+  EN_ATTENTE          // Créée par l'agent, visible pour les adhérents
+  RESERVEE            // Un adhérent a réservé
+  RESERVATION_ANNULEE // Adhérent ou partenaire a annulé la réservation
+  CONFIRMEE           // Partenaire/agent a confirmé la réservation
+  EN_COURS            // Voiture en route
+  ARRIVEE             // Voiture arrivée à destination
 }
-
 enum TypeDocument {
   CARTE_IDENTITE
   PERMIS
@@ -489,6 +567,15 @@ enum TypeDocument {
   W_GARAGE
   DOCUMENT_ADMINISTRATIF // ✅ Pour les documents mission
 }
+
+
+
+enum StatutDocument {
+  VALIDE
+  NON_VALIDE
+  EN_ATTENTE
+}
+
 
 // ============================================
 // 🚗 VEHICULE
@@ -507,7 +594,7 @@ model Vehicule {
   dateModification DateTime @updatedAt
 
   partenaireId Int
-  partenaire   Partenaire @relation(fields: [partenaireId], references: [id])
+  partenaire   Partenaire @relation(fields: [partenaireId], references: [id],onDelete: Cascade)
   missions     Mission[] // ✅ Saut de ligne ajouté
 
   @@index([partenaireId])
@@ -546,7 +633,7 @@ model Adresse {
 // ============================================
 
 model Mission {
-  id          String        @id @default(cuid())
+  id          String        @id @default(uuid())
   statut      StatutMission @default(EN_ATTENTE)
   commentaire String?       @db.Text
 
@@ -554,8 +641,7 @@ model Mission {
   dateModification DateTime @updatedAt
 
   partenaireId Int
-  partenaire   Partenaire @relation(fields: [partenaireId], references: [id])
-  // ✅ Assurez-vous qu'il y a un saut de ligne ici
+  partenaire   Partenaire @relation(fields: [partenaireId], references: [id], onDelete: Cascade)
 
   vehicule   Vehicule @relation(fields: [vehiculeId], references: [id])
   vehiculeId String
@@ -566,16 +652,28 @@ model Mission {
   adresseArrivee   Adresse @relation("MissionArrivee", fields: [adresseArriveeId], references: [id])
   adresseArriveeId String
 
+  // ✅ AJOUTER CES 2 LIGNES
+  agenceId Int?
+  agence   Agence? @relation(fields: [agenceId], references: [id], onDelete: SetNull)
+
+  // ✅ AJOUTER CETTE LIGNE
+  agentId Int?
+  agent   Agent?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
   disponibilite DisponibiliteMission?
   notifications NotificationMission[]
   calculs       CalculMission?
   documents     Document[]
+  reservations  ReservationMission[]
 
   @@index([partenaireId])
   @@index([vehiculeId])
   @@index([statut])
+  @@index([agenceId])  // ✅ AJOUTER
+  @@index([agentId])   // ✅ AJOUTER
   @@map("missions")
 }
+
 
 // ============================================
 // ⏰ DISPONIBILITE
@@ -584,8 +682,9 @@ model Mission {
 model DisponibiliteMission {
   id String @id @default(cuid())
 
-  dateDebut DateTime
-  dateFin   DateTime
+  dateDebut     DateTime
+  dateFin       DateTime
+  dateDepartMax DateTime? // ✅ Date calculée automatiquement
 
   mission   Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
   missionId String  @unique
@@ -623,7 +722,9 @@ model CalculMission {
 
   distanceKm   Decimal @db.Decimal(10, 2)
   fraisPeage   Decimal @db.Decimal(10, 2)
-  montantTotal Decimal @db.Decimal(10, 2)
+  montantKm    Decimal @db.Decimal(10, 2)  // ✅ distanceKm × prixParKm
+  montantFinal Decimal @db.Decimal(10, 2)  // ✅ montantKm + fraisPeage (arrondi)
+  montantTotal Decimal @db.Decimal(10, 2)  // ✅ gardé pour compatibilité (= montantFinal)
 
   detailCalcul Json?
 
@@ -635,4 +736,181 @@ model CalculMission {
 
   @@index([missionId])
   @@map("calculs_mission")
+}
+
+model AlerteGeographique {
+  id        String      @id @default(cuid())
+  
+  // Utilisateur
+  userId    Int
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Type d'alerte
+  type      TypeAlerte
+  
+  // Rayon commun aux 2 types
+  rayon     Int         // en km
+  
+  // Type 1 : Géographique simple (1 ville)
+  villeNom      String?     @db.VarChar(255)
+  latitude      Float?
+  longitude     Float?
+  
+  // Type 2 : Trajet (départ → arrivée)
+  villeDepartNom    String?  @db.VarChar(255)
+  latitudeDepart    Float?
+  longitudeDepart   Float?
+  
+  villeArriveeNom   String?  @db.VarChar(255)
+  latitudeArrivee   Float?
+  longitudeArrivee  Float?
+  
+
+  dateDepart       DateTime?   
+  dateDepartMax    DateTime?  
+
+  // État
+  actif     Boolean  @default(true)
+  
+  // Notifications envoyées
+  notifications NotificationAlerte[]
+  
+  // Traçabilité
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+  
+  @@index([userId, actif])
+  @@index([type, actif])
+  @@map("alertes_geographiques")
+}
+
+model NotificationAlerte {
+  id        String   @id @default(cuid())
+  
+  alerteId  String
+  alerte    AlerteGeographique @relation(fields: [alerteId], references: [id], onDelete: Cascade)
+  
+  missionId String
+  
+  emailEnvoye Boolean @default(false)
+  dateEnvoi   DateTime?
+  
+  dateCreation DateTime @default(now())
+  
+  @@index([alerteId, missionId])
+  @@map("notifications_alertes")
+}
+
+
+// ============================================
+// 📋 RESERVATIONS DE MISSIONS
+// ============================================
+
+model ReservationMission {
+  id String @id @default(cuid())
+
+  // Relations principales
+  missionId String
+  mission   Mission @relation(fields: [missionId], references: [id], onDelete: Restrict)
+
+  adherentId Int
+  adherent   Adherent @relation(fields: [adherentId], references: [id], onDelete: Restrict)
+
+  // Statut
+  statut            StatutReservation @default(EN_ATTENTE)
+  numeroReservation String            @unique @db.VarChar(50) // Ex: RES-2026-00001
+
+  // ✅ Dates/heures de départ (saisies par l'adhérent)
+  dateDepart  DateTime // Date de départ choisie
+  heureDepart String   @db.VarChar(5) // Format "HH:MM"
+
+  // ✅ Dates/heures d'arrivée estimées (calculées automatiquement)
+  dateArrivee  DateTime // Date d'arrivée estimée
+  heureArrivee String   @db.VarChar(5) // Format "HH:MM"
+
+  // Durée estimée (en minutes)
+  dureeEstimee Int? // Ex: 180 minutes = 3h
+
+  // Commentaire optionnel de l'adhérent
+  commentaireAdherent String? @db.Text
+
+  // Réponse du partenaire (après validation)
+  commentairePartenaire String? @db.Text
+  dateValidation        DateTime?
+  dateRefus             DateTime?
+  motifRefus            String? @db.Text
+
+  // Montants (copiés depuis mission.calculs au moment de la réservation)
+  montantTotal Decimal @db.Decimal(10, 2)
+  fraisPeage   Decimal @db.Decimal(10, 2)
+  distanceKm   Decimal @db.Decimal(10, 2)
+
+  // Traçabilité
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([missionId])
+  @@index([adherentId])
+  @@index([statut])
+  @@index([dateDepart])
+  @@index([numeroReservation])
+  @@map("reservations_mission")
+}
+model Agence {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  nom        String  @db.VarChar(150)
+  adresse    String? @db.VarChar(255)
+  ville      String? @db.VarChar(100)
+  codePostal String? @db.VarChar(20)
+  telephone  String? @db.VarChar(20)
+  email      String? @db.VarChar(255)
+  isActive   Boolean @default(false)
+
+  partenaireId Int
+  partenaire   Partenaire @relation(fields: [partenaireId], references: [id], onDelete: Cascade)
+
+  agents Agent[]
+  missions Mission[]  // ✅ AJOUTER
+
+  @@index([partenaireId])
+  @@index([isActive])
+  @@map("agences")
+}
+
+
+model Agent {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  email     String  @unique @db.VarChar(255)
+  password  String? @db.VarChar(255)
+  nom       String? @db.VarChar(100)
+  prenom    String? @db.VarChar(100)
+  telephone String? @db.VarChar(20)
+  photo     String? @db.VarChar(500)
+
+  profileToken          String?   @unique @db.VarChar(255)
+  profileTokenExpiresAt DateTime?
+  isProfileCompleted    Boolean   @default(false)
+
+  isActive Boolean @default(false)
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  agenceId Int?     // ✅ nullable — permet disconnect
+  agence   Agence?  @relation(fields: [agenceId], references: [id], onDelete: SetNull) // ✅ SetNull au lieu de Cascade
+
+  partenaireId Int?
+  partenaire   Partenaire? @relation(fields: [partenaireId], references: [id], onDelete: SetNull)
+
+  missions Mission[]  
+  @@index([email])
+  @@index([isActive])
+  @@index([agenceId])
+  @@map("agents")
 }

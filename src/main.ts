@@ -14,6 +14,7 @@ import fastifyStatic from '@fastify/static';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './filters/http-exception.filter';
 
+
 async function saveFiles(demandeId: number, files: Record<string, MultipartFile[]>) {
   const basePath = join(process.cwd(), 'uploads', 'demandes', String(demandeId));
 
@@ -32,6 +33,7 @@ async function saveFiles(demandeId: number, files: Record<string, MultipartFile[
     }
   }
 }
+
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -53,19 +55,19 @@ async function bootstrap() {
     new FastifyAdapter(),
   );
 
-  // ✅ Servir les fichiers statiques avec cast explicite
+  // ✅ Fichiers statiques
   const uploadsPath = join(process.cwd(), 'uploads');
   logger.log(`📁 Uploads path: ${uploadsPath}`);
-  
+
   await app.register(fastifyStatic as any, {
     root: uploadsPath,
     prefix: '/uploads/',
     decorateReply: false,
   });
-  
+
   logger.log('✅ Fichiers statiques configurés sur /uploads/');
 
-  // ✅ multipart plugin
+  // ✅ Multipart plugin
   await app.register(multipart as any, {
     attachFieldsToBody: 'keyValues',
     limits: { fileSize: 10 * 1024 * 1024 },
@@ -79,7 +81,7 @@ async function bootstrap() {
     },
   });
 
-  // CORS
+  // ✅ CORS
   const isDevelopment = process.env.NODE_ENV === 'development';
 
   app.enableCors({
@@ -106,7 +108,7 @@ async function bootstrap() {
     })`,
   );
 
-  // Validation globale
+  // ✅ Validation globale
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -116,13 +118,13 @@ async function bootstrap() {
     }),
   );
 
-  // Exception filter global
+  // ✅ Exception filter global
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  // Swagger
+  // ✅ Swagger — tous les tags enregistrés
   const config = new DocumentBuilder()
     .setTitle('API TransConvoy')
-    .setDescription("API de gestion des rôles, utilisateurs et authentification")
+    .setDescription('API de gestion des rôles, utilisateurs et authentification')
     .setVersion('1.0')
     .addBearerAuth(
       {
@@ -135,9 +137,20 @@ async function bootstrap() {
     )
     .addServer('http://localhost:3000', 'Serveur de développement')
     .addServer('http://localhost:3001', 'Frontend Next.js')
+    // ✅ Tous les tags déclarés explicitement
     .addTag('Auth', "Endpoints d'authentification")
     .addTag('Users', 'Gestion des utilisateurs')
     .addTag('Roles', 'Gestion des rôles')
+    .addTag('Agencies', 'Gestion des agences')
+    .addTag('Agents', 'Gestion des agents')
+    .addTag('Adherents', 'Gestion des adhérents')
+    .addTag('Partenaires', 'Gestion des partenaires')
+    .addTag('Demandes Partenaire', 'Demandes de partenariat')  // ✅ ajouté
+    .addTag('Demandes Adhérent', "Demandes d'adhésion")        // ✅ ajouté
+    .addTag('Missions', 'Gestion des missions')
+    .addTag('Reservations Mission', 'Réservations de missions')
+    .addTag('Alertes', 'Alertes géographiques')
+    .addTag('Geo', 'Géolocalisation et itinéraires')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

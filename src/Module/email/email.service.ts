@@ -22,18 +22,51 @@ export class EmailService {
     });
   }
 
-  // Méthode générique pour tous types d'emails
-  async sendMail(options: {
-    to: string;
-    subject: string;
-    html: string;
-    text?: string;
-  }) {
-    return await this.transporter.sendMail({
-      from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
-      ...options,
-    });
+// src/Module/email/email.service.ts
+
+// src/Module/email/email.service.ts
+
+async sendMail(options: {
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+}) {
+  console.log('\n📧 ========== SENDMAIL APPELÉE ==========');
+  console.log('📧 options.to reçu:', options.to);  // ✅ REGARDE CE LOG
+  console.log('📧 options.subject:', options.subject);
+
+  // Construire l'objet mail
+  const mailOptions = {
+    from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+    text: options.text || '',
+  };
+
+  console.log('📬 mailOptions construit:');
+  console.log('   from:', mailOptions.from);
+  console.log('   to:', mailOptions.to);  // ✅ REGARDE CE LOG
+  console.log('   subject:', mailOptions.subject);
+
+  console.log('📤 Envoi via nodemailer...');
+
+  try {
+    const info = await this.transporter.sendMail(mailOptions);
+
+    console.log('✅ Nodemailer a envoyé l\'email');
+    console.log('   accepted:', info.accepted);  // ✅ REGARDE CE LOG
+    console.log('   rejected:', info.rejected);
+    console.log('   messageId:', info.messageId);
+    console.log('📧 ========================================\n');
+
+    return info;
+  } catch (error) {
+    console.error('❌ Erreur nodemailer:', error);
+    throw error;
   }
+}
 
   // Méthode spécifique pour reset password
 
@@ -875,19 +908,23 @@ async sendAcceptationPartenaireAvecProfil(data: {
     </html>
   `;
 
-  await this.transporter.sendMail({
-    from: process.env.SMTP_FROM,
-    to: data.email,
-    subject,
-    html,
-    attachments: [
-      {
-        filename: data.contratName,
-        path: data.contratPath,
-        contentType: 'application/pdf',
-      },
-    ],
-  });
+await this.transporter.sendMail({
+  from: {
+    name: process.env.EMAIL_FROM_NAME,   // "Revolution"
+    address: process.env.SMTP_FROM,      // ton email technique
+  },
+  to: data.email,
+  subject,
+  html,
+  attachments: [
+    {
+      filename: data.contratName,
+      path: data.contratPath,
+      contentType: 'application/pdf',
+    },
+  ],
+});
+
 }
 
 
@@ -961,6 +998,700 @@ async sendPartenaireDemandeRefusee(
     text: `Bonjour ${nom}, concernant votre demande de partenariat pour ${entite}...`
   });
 }
+
+
+// src/Module/email/email.service.ts
+
+/**
+ * 🚨 Email alerte géographique (Type 1) : Mission autour d'une ville
+ */
+// src/Module/email/email.service.ts
+
+async sendConfirmationAlerteGeographique(
+  userEmail: string,
+  userName: string,
+  villeNom: string,
+  rayon: number,
+) {
+  console.log('\n📨 ========== FONCTION EMAIL APPELÉE ==========');
+  console.log('📨 Paramètre userEmail reçu:', userEmail);  // ✅ REGARDE CE LOG
+  console.log('📨 Paramètre userName reçu:', userName);
+  console.log('📨 Paramètre villeNom reçu:', villeNom);
+  console.log('📨 Paramètre rayon reçu:', rayon);
+
+  const subject = '✅ Votre alerte géographique a été créée';
+
+  const html = `...`;  // Ton template HTML
+
+  console.log('📬 Appel sendMail avec:');
+  console.log('   to:', userEmail);  // ✅ REGARDE CE LOG
+  console.log('   subject:', subject);
+
+  const result = await this.sendMail({
+    to: userEmail,
+    subject,
+    html,
+    text: `Votre alerte géographique autour de ${villeNom} (${rayon} km) a été créée.`,
+  });
+
+  console.log('📨 ==============================================\n');
+
+  return result;
+}
+
+  /**
+   * ✅ Email de confirmation - Alerte trajet créée
+   */
+  async sendConfirmationAlerteTrajet(
+    userEmail: string,
+    userName: string,
+    villeDepartNom: string,
+    villeArriveeNom: string,
+    rayon: number,
+  ) {
+    const subject = '✅ Votre alerte trajet a été créée';
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 28px;">✅ Alerte Activée</h1>
+          <p style="color: #ddd6fe; margin: 10px 0 0 0;">Alerte trajet</p>
+        </div>
+        
+        <div style="background-color: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none;">
+          <h2 style="color: #7c3aed; margin-top: 0;">Votre alerte trajet est active ! 🎉</h2>
+          
+          <p style="font-size: 16px; line-height: 1.6; color: #374151;">
+            Bonjour <strong>${userName}</strong>,
+          </p>
+          
+          <p style="font-size: 16px; line-height: 1.6; color: #374151;">
+            Parfait ! Vous recevrez désormais un email automatique dès qu'une mission correspondra 
+            à votre trajet entre <strong>${villeDepartNom}</strong> et <strong>${villeArriveeNom}</strong>.
+          </p>
+          
+          <div style="background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); border: 2px solid #8b5cf6; padding: 25px; margin: 25px 0; border-radius: 10px; text-align: center;">
+            <h3 style="color: #6d28d9; margin: 0 0 15px 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px;">
+              🔔 Trajet surveillé
+            </h3>
+            <div style="font-size: 24px; font-weight: bold; color: #1f2937; margin: 15px 0;">
+              ${villeDepartNom} <span style="color: #8b5cf6; font-size: 28px;">→</span> ${villeArriveeNom}
+            </div>
+            <p style="margin: 15px 0 0 0; color: #6b7280; font-size: 14px;">
+              Rayon de flexibilité : <strong>±${rayon} km</strong> autour de chaque ville
+            </p>
+          </div>
+          
+          <div style="background-color: #f8fafc; border-left: 4px solid #8b5cf6; padding: 25px; margin: 25px 0; border-radius: 8px;">
+            <h3 style="color: #6d28d9; margin-top: 0; font-size: 18px;">
+              ⚙️ Paramètres de votre alerte
+            </h3>
+            
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px; width: 40%;">
+                  <strong>🚀 Départ :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #1f2937; font-size: 15px; font-weight: 600;">
+                  ${villeDepartNom} (±${rayon} km)
+                </td>
+              </tr>
+              <tr style="background-color: rgba(255, 255, 255, 0.5);">
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px;">
+                  <strong>🎯 Arrivée :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #1f2937; font-size: 15px; font-weight: 600;">
+                  ${villeArriveeNom} (±${rayon} km)
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px;">
+                  <strong>🔔 Statut :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #16a34a; font-size: 15px; font-weight: 600;">
+                  ✅ Active
+                </td>
+              </tr>
+            </table>
+          </div>
+          
+          <div style="background-color: #f0fdf4; border-left: 4px solid #16a34a; padding: 20px; border-radius: 5px; margin: 25px 0;">
+            <h4 style="margin: 0 0 10px 0; color: #166534; font-size: 15px;">
+              ℹ️ Comment ça marche ?
+            </h4>
+            <ul style="margin: 0; padding-left: 20px; color: #166534; font-size: 14px; line-height: 1.8;">
+              <li>Nous analysons toutes les nouvelles missions publiées</li>
+              <li>Si une mission passe près de votre départ ET de votre arrivée, vous êtes notifié</li>
+              <li>Le rayon de ±${rayon} km vous offre de la flexibilité sur le trajet exact</li>
+              <li>Vous recevez l'email instantanément pour pouvoir réserver en priorité</li>
+            </ul>
+          </div>
+          
+          <div style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 20px; border-radius: 8px; margin: 25px 0;">
+            <p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.6;">
+              💡 <strong>Avantage :</strong> Cette alerte est parfaite si vous faites régulièrement 
+              ce trajet. Vous serez notifié en priorité des missions correspondantes et pourrez 
+              optimiser vos déplacements !
+            </p>
+          </div>
+          
+          <div style="text-align: center; margin: 35px 0;">
+            <a href="${process.env.FRONTEND_URL}/adherent/parametres/alertes" 
+               style="background-color: #8b5cf6; color: white; padding: 16px 45px; text-decoration: none; border-radius: 25px; font-weight: bold; display: inline-block; font-size: 16px; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);">
+              ⚙️ Gérer mes alertes
+            </a>
+          </div>
+          
+          <p style="font-size: 14px; color: #6b7280; margin-top: 30px; text-align: center;">
+            Vous pouvez modifier, désactiver ou supprimer cette alerte à tout moment.
+          </p>
+          
+          <p style="font-size: 16px; color: #374151; margin-top: 20px; text-align: center;">
+            Bonne route !<br>
+            <strong style="color: #ea580c;">L'équipe Revolution</strong>
+          </p>
+        </div>
+        
+        <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 10px 10px;">
+          <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+            Email de confirmation d'alerte trajet
+          </p>
+          <p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 11px;">
+            © ${new Date().getFullYear()} Revolution. Tous droits réservés.
+          </p>
+        </div>
+      </div>
+    `;
+
+    return this.sendMail({
+      to: userEmail,
+      subject,
+      html,
+      text: `Votre alerte trajet ${villeDepartNom} → ${villeArriveeNom} (±${rayon} km) a été créée.`,
+    });
+  }
+
+  /**
+   * 🚨 Email notification - Nouvelle mission correspondant à l'alerte géographique
+   */
+  async sendAlerteGeographique(
+    userEmail: string,
+    userName: string,
+    villeNom: string,
+    rayon: number,
+    mission: any,
+  ) {
+    const subject = `🚨 Nouvelle mission près de ${villeNom}`;
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 28px;">🚨 Nouvelle Mission</h1>
+          <p style="color: #fed7aa; margin: 10px 0 0 0;">Alerte géographique</p>
+        </div>
+        
+        <div style="background-color: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none;">
+          <h2 style="color: #ea580c; margin-top: 0;">Mission disponible près de ${villeNom} 🎯</h2>
+          
+          <p style="font-size: 16px; line-height: 1.6; color: #374151;">
+            Bonjour <strong>${userName}</strong>,
+          </p>
+          
+          <p style="font-size: 16px; line-height: 1.6; color: #374151;">
+            Une nouvelle mission correspond à votre alerte autour de <strong>${villeNom}</strong> 
+            dans un rayon de <strong>${rayon} km</strong>.
+          </p>
+          
+          <div style="background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border-left: 4px solid #ea580c; padding: 25px; margin: 25px 0; border-radius: 10px;">
+            <h3 style="color: #ea580c; margin-top: 0; font-size: 18px;">
+              📋 Détails de la mission
+            </h3>
+            
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px; width: 40%;">
+                  <strong>🚀 Départ :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #1f2937; font-size: 15px; font-weight: 600;">
+                  ${mission.adresseDepart.villeNom}
+                </td>
+              </tr>
+              <tr style="background-color: rgba(249, 250, 251, 0.5);">
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px;">
+                  <strong>🎯 Arrivée :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #1f2937; font-size: 15px; font-weight: 600;">
+                  ${mission.adresseArrivee.villeNom}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px;">
+                  <strong>🚛 Véhicule :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #1f2937; font-size: 15px;">
+                  ${mission.vehicule.typeVehicule}
+                </td>
+              </tr>
+              <tr style="background-color: rgba(249, 250, 251, 0.5);">
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px;">
+                  <strong>📏 Distance :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #1f2937; font-size: 15px;">
+                  ${mission.calculs?.distanceKm || 'N/A'} km
+                </td>
+              </tr>
+              ${
+                mission.calculs?.fraisPeage
+                  ? `
+              <tr>
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px;">
+                  <strong>💳 Péages :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #1f2937; font-size: 15px;">
+                  ${mission.calculs.fraisPeage}€
+                </td>
+              </tr>
+              `
+                  : ''
+              }
+            </table>
+            
+            <div style="background-color: white; padding: 20px; border-radius: 8px; margin-top: 20px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+              <p style="margin: 0 0 5px 0; color: #6b7280; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
+                Rémunération
+              </p>
+              <div style="font-size: 36px; font-weight: bold; color: #ea580c; margin: 10px 0;">
+                ${mission.calculs?.montantTotal || 'N/A'}€
+              </div>
+              <p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 13px;">
+                TTC - Paiement sécurisé
+              </p>
+            </div>
+          </div>
+          
+          <div style="text-align: center; margin: 35px 0;">
+            <a href="${process.env.FRONTEND_URL}/adherent/mission-reservation/${mission.id}" 
+               style="background-color: #ea580c; color: white; padding: 16px 45px; text-decoration: none; border-radius: 25px; font-weight: bold; display: inline-block; font-size: 16px; box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3);">
+              🚗 Voir la mission
+            </a>
+          </div>
+          
+          <div style="background-color: #dbeafe; border: 1px solid #3b82f6; padding: 15px; border-radius: 8px; margin: 25px 0;">
+            <p style="margin: 0; color: #1e40af; font-size: 13px;">
+              💡 <strong>Astuce :</strong> Les missions populaires partent vite ! 
+              Consultez les détails rapidement pour augmenter vos chances.
+            </p>
+          </div>
+          
+          <p style="font-size: 14px; color: #6b7280; margin-top: 30px; text-align: center;">
+            Notification envoyée automatiquement par votre alerte autour de <strong>${villeNom}</strong> (${rayon} km)
+          </p>
+          
+          <p style="font-size: 16px; color: #374151; margin-top: 20px; text-align: center;">
+            Bonne route !<br>
+            <strong style="color: #ea580c;">L'équipe Revolution</strong>
+          </p>
+        </div>
+        
+        <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 10px 10px;">
+          <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+            Cet email a été envoyé automatiquement suite à votre alerte géographique.
+          </p>
+          <p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 11px;">
+            © ${new Date().getFullYear()} Revolution. Tous droits réservés.
+          </p>
+        </div>
+      </div>
+    `;
+
+    return this.sendMail({
+      to: userEmail,
+      subject,
+      html,
+      text: `Nouvelle mission près de ${villeNom} : ${mission.adresseDepart.villeNom} → ${mission.adresseArrivee.villeNom} - ${mission.calculs?.montantTotal || 'N/A'}€`,
+    });
+  }
+
+  /**
+   * 🚨 Email notification - Nouvelle mission correspondant à l'alerte trajet
+   */
+  async sendAlerteTrajet(
+    userEmail: string,
+    userName: string,
+    villeDepartNom: string,
+    villeArriveeNom: string,
+    rayon: number,
+    mission: any,
+  ) {
+    const subject = `🚨 Mission ${villeDepartNom} → ${villeArriveeNom} disponible`;
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+          <h1 style="color: white; margin: 0; font-size: 28px;">🚨 Mission sur votre trajet</h1>
+          <p style="color: #ddd6fe; margin: 10px 0 0 0;">Alerte trajet</p>
+        </div>
+        
+        <div style="background-color: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none;">
+          <h2 style="color: #7c3aed; margin-top: 0;">Mission ${villeDepartNom} → ${villeArriveeNom} 🎯</h2>
+          
+          <p style="font-size: 16px; line-height: 1.6; color: #374151;">
+            Bonjour <strong>${userName}</strong>,
+          </p>
+          
+          <p style="font-size: 16px; line-height: 1.6; color: #374151;">
+            Excellente nouvelle ! Une mission correspond parfaitement à votre alerte de trajet.
+          </p>
+          
+          <div style="background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); border: 2px solid #8b5cf6; padding: 20px; margin: 25px 0; border-radius: 10px; text-align: center;">
+            <h3 style="color: #6d28d9; margin: 0 0 15px 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px;">
+              🔔 Votre alerte
+            </h3>
+            <div style="font-size: 20px; font-weight: bold; color: #1f2937; margin: 10px 0;">
+              ${villeDepartNom} <span style="color: #8b5cf6;">→</span> ${villeArriveeNom}
+            </div>
+            <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;">
+              Rayon de recherche : <strong>±${rayon} km</strong> autour de chaque ville
+            </p>
+          </div>
+          
+          <div style="background-color: #f8fafc; border-left: 4px solid #8b5cf6; padding: 25px; margin: 25px 0; border-radius: 8px;">
+            <h3 style="color: #6d28d9; margin-top: 0; font-size: 18px;">
+              📋 Détails de la mission
+            </h3>
+            
+            <table style="width: 100%; border-collapse: collapse;">
+              <tr>
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px; width: 40%;">
+                  <strong>🚀 Départ :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #1f2937; font-size: 15px; font-weight: 600;">
+                  ${mission.adresseDepart.villeNom}
+                </td>
+              </tr>
+              <tr style="background-color: rgba(255, 255, 255, 0.5);">
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px;">
+                  <strong>🎯 Arrivée :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #1f2937; font-size: 15px; font-weight: 600;">
+                  ${mission.adresseArrivee.villeNom}
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px;">
+                  <strong>🚛 Véhicule :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #1f2937; font-size: 15px;">
+                  ${mission.vehicule.typeVehicule}
+                </td>
+              </tr>
+              <tr style="background-color: rgba(255, 255, 255, 0.5);">
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px;">
+                  <strong>📏 Distance :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #1f2937; font-size: 15px;">
+                  ${mission.calculs?.distanceKm || 'N/A'} km
+                </td>
+              </tr>
+              ${
+                mission.calculs?.fraisPeage
+                  ? `
+              <tr>
+                <td style="padding: 12px 0; color: #6b7280; font-size: 14px;">
+                  <strong>💳 Péages :</strong>
+                </td>
+                <td style="padding: 12px 0; color: #1f2937; font-size: 15px;">
+                  ${mission.calculs.fraisPeage}€
+                </td>
+              </tr>
+              `
+                  : ''
+              }
+            </table>
+            
+            <div style="background-color: white; padding: 20px; border-radius: 8px; margin-top: 20px; text-align: center; box-shadow: 0 2px 8px rgba(139, 92, 246, 0.1);">
+              <p style="margin: 0 0 5px 0; color: #6b7280; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">
+                Rémunération
+              </p>
+              <div style="font-size: 36px; font-weight: bold; color: #8b5cf6; margin: 10px 0;">
+                ${mission.calculs?.montantTotal || 'N/A'}€
+              </div>
+              <p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 13px;">
+                TTC - Paiement sécurisé
+              </p>
+            </div>
+          </div>
+          
+          <div style="background-color: #dcfce7; border-left: 4px solid #16a34a; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p style="margin: 0; color: #166534; font-size: 14px;">
+              ✅ <strong>Correspondance parfaite :</strong> Cette mission passe près de vos villes de départ et d'arrivée.
+            </p>
+          </div>
+          
+          <div style="text-align: center; margin: 35px 0;">
+            <a href="${process.env.FRONTEND_URL}/adherent/mission-reservation/${mission.id}" 
+               style="background-color: #8b5cf6; color: white; padding: 16px 45px; text-decoration: none; border-radius: 25px; font-weight: bold; display: inline-block; font-size: 16px; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);">
+              🚗 Voir la mission
+            </a>
+          </div>
+          
+          <div style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin: 25px 0;">
+            <p style="margin: 0; color: #92400e; font-size: 13px;">
+              💡 <strong>Conseil :</strong> Cette mission correspond exactement à votre itinéraire habituel. 
+              Consultez-la rapidement avant qu'un autre convoyeur la réserve !
+            </p>
+          </div>
+          
+          <p style="font-size: 14px; color: #6b7280; margin-top: 30px; text-align: center;">
+            Notification envoyée par votre alerte trajet <strong>${villeDepartNom} → ${villeArriveeNom}</strong> (±${rayon} km)
+          </p>
+          
+          <p style="font-size: 16px; color: #374151; margin-top: 20px; text-align: center;">
+            Bonne route !<br>
+            <strong style="color: #ea580c;">L'équipe Revolution</strong>
+          </p>
+        </div>
+        
+        <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 10px 10px;">
+          <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+            Cet email a été envoyé automatiquement suite à votre alerte de trajet.
+          </p>
+          <p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 11px;">
+            © ${new Date().getFullYear()} Revolution. Tous droits réservés.
+          </p>
+        </div>
+      </div>
+    `;
+
+    return this.sendMail({
+      to: userEmail,
+      subject,
+      html,
+      text: `Mission sur votre trajet ${villeDepartNom} → ${villeArriveeNom} : ${mission.adresseDepart.villeNom} → ${mission.adresseArrivee.villeNom} - ${mission.calculs?.montantTotal || 'N/A'}€`,
+    });
+  }
+
+
+async sendAgenceCreatedCompleteProfile(data: {
+  email: string;
+  nomAgence: string;
+  ville?: string;
+  profileToken: string;
+  codePartenaire: string;
+}) {
+  const { email, nomAgence, ville, profileToken, codePartenaire } = data;
+
+  // ✅ URL agent correcte
+  const lienProfil = `${process.env.FRONTEND_URL}/formulaire/agent/profil-agent-formulaire/${profileToken}?code=${codePartenaire}`;
+
+  const subject = `🏢 Agence "${nomAgence}" créée — Complétez votre profil`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <div style="background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 28px;">🏢 Agence créée avec succès</h1>
+        <p style="color: #fed7aa; margin: 10px 0 0 0;">Bienvenue sur Revolution</p>
+      </div>
+
+      <div style="background-color: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none;">
+        <h2 style="color: #ea580c; margin-top: 0;">Votre agence ${nomAgence} est enregistrée 🎯</h2>
+
+        <p style="font-size: 16px; line-height: 1.6; color: #374151;">Bonjour,</p>
+
+        <p style="font-size: 16px; line-height: 1.6; color: #374151;">
+          Votre agence a bien été créée sur la plateforme Revolution. Pour l'activer pleinement, merci de compléter votre profil agent.
+        </p>
+
+        <div style="background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 2px solid #ea580c; padding: 20px; margin: 25px 0; border-radius: 10px; text-align: center;">
+          <h3 style="color: #c2410c; margin: 0 0 15px 0; font-size: 16px; text-transform: uppercase; letter-spacing: 1px;">
+            🏢 Votre agence
+          </h3>
+          <div style="font-size: 22px; font-weight: bold; color: #1f2937; margin: 10px 0;">
+            ${nomAgence}
+          </div>
+          ${ville ? `<p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;">📍 Ville : <strong>${ville}</strong></p>` : ''}
+        </div>
+
+        <div style="background-color: #f8fafc; border-left: 4px solid #ea580c; padding: 25px; margin: 25px 0; border-radius: 8px;">
+          <h3 style="color: #c2410c; margin-top: 0; font-size: 18px;">📋 Prochaines étapes</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+              <td style="padding: 12px 0; color: #6b7280; font-size: 14px; width: 10%;"><strong>1️⃣</strong></td>
+              <td style="padding: 12px 0; color: #1f2937; font-size: 15px;">Cliquez sur le bouton ci-dessous pour accéder au formulaire</td>
+            </tr>
+            <tr style="background-color: rgba(255,255,255,0.5);">
+              <td style="padding: 12px 0; color: #6b7280; font-size: 14px;"><strong>2️⃣</strong></td>
+              <td style="padding: 12px 0; color: #1f2937; font-size: 15px;">Ajoutez votre photo de profil</td>
+            </tr>
+            <tr>
+              <td style="padding: 12px 0; color: #6b7280; font-size: 14px;"><strong>3️⃣</strong></td>
+              <td style="padding: 12px 0; color: #1f2937; font-size: 15px;">Créez votre mot de passe sécurisé</td>
+            </tr>
+            <tr style="background-color: rgba(255,255,255,0.5);">
+              <td style="padding: 12px 0; color: #6b7280; font-size: 14px;"><strong>4️⃣</strong></td>
+              <td style="padding: 12px 0; color: #1f2937; font-size: 15px;">Validez pour activer pleinement votre compte agent</td>
+            </tr>
+          </table>
+        </div>
+
+        <div style="background-color: #dcfce7; border-left: 4px solid #16a34a; padding: 15px; border-radius: 5px; margin: 20px 0;">
+          <p style="margin: 0; color: #166534; font-size: 14px;">
+            ✅ <strong>Agence enregistrée :</strong> Votre agence est bien présente dans notre système.
+            Il ne reste qu'à compléter le profil pour la rendre opérationnelle.
+          </p>
+        </div>
+
+        <div style="text-align: center; margin: 35px 0;">
+          <a href="${lienProfil}"
+             style="background-color: #ea580c; color: white; padding: 16px 45px; text-decoration: none;
+                    border-radius: 25px; font-weight: bold; display: inline-block; font-size: 16px;
+                    box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3);">
+            ✏️ Compléter mon profil
+          </a>
+        </div>
+
+        <div style="background-color: #fef3c7; border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin: 25px 0;">
+          <p style="margin: 0; color: #92400e; font-size: 13px;">
+            💡 <strong>Conseil :</strong> Ce lien est valide pendant <strong>7 jours</strong>.
+            Passé ce délai, contactez votre partenaire pour en obtenir un nouveau.
+          </p>
+        </div>
+
+        <p style="font-size: 14px; color: #6b7280; margin-top: 30px; text-align: center;">
+          Notification envoyée suite à la création de l'agence <strong>${nomAgence}</strong>
+          ${ville ? `à <strong>${ville}</strong>` : ''}.
+        </p>
+
+        <p style="font-size: 16px; color: #374151; margin-top: 20px; text-align: center;">
+          Bienvenue à bord !<br>
+          <strong style="color: #ea580c;">L'équipe Revolution</strong>
+        </p>
+      </div>
+
+      <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 10px 10px;">
+        <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+          Cet email a été envoyé automatiquement suite à la création de votre agence.
+        </p>
+        <p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 11px;">
+          © ${new Date().getFullYear()} Revolution. Tous droits réservés.
+        </p>
+      </div>
+    </div>
+  `;
+
+  return this.sendMail({
+    to: email,
+    subject,
+    html,
+    text: `Votre agence "${nomAgence}"${ville ? ` (${ville})` : ''} a été créée. Complétez votre profil via ce lien (valide 7 jours) : ${lienProfil}`,
+  });
+}
+
+
+
+// src/Module/email/email.service.ts
+// Ajouter cette méthode après sendConfirmationRendezvousPartenaire
+
+async sendReportRendezvousPartenaire(data: {
+  email: string;
+  nom: string;
+  entite: string;
+  typeRdv: string;
+  dateRdv: Date;
+  creneau: string;
+}): Promise<void> {
+  const dateFormatee = new Date(data.dateRdv).toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    year:    'numeric',
+    month:   'long',
+    day:     'numeric',
+  });
+
+  const typeRdvTexte = data.typeRdv === 'TELEPHONIQUE'
+    ? 'téléphonique'
+    : 'physique';
+
+  const subject = `Votre rendez-vous a été reporté — ${dateFormatee}`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+
+      <!-- Header -->
+      <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 28px;">Revolution</h1>
+        <p style="color: #fef3c7; margin: 10px 0 0 0;">Rendez-vous reporté</p>
+      </div>
+
+      <!-- Body -->
+      <div style="background-color: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none;">
+        <h2 style="color: #d97706; margin-top: 0;">
+          Votre rendez-vous a été reporté
+        </h2>
+
+        <p style="font-size: 16px; line-height: 1.6; color: #374151;">
+          Bonjour <strong>${data.nom}</strong>,
+        </p>
+
+        <p style="font-size: 16px; line-height: 1.6; color: #374151;">
+          Nous vous informons que votre rendez-vous ${typeRdvTexte}
+          concernant le partenariat pour <strong>${data.entite}</strong>
+          a été reporté à une nouvelle date.
+        </p>
+
+        <!-- Nouveau RDV -->
+        <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2px solid #f59e0b; padding: 25px; margin: 25px 0; border-radius: 10px; text-align: center;">
+          <h2 style="color: #d97706; margin: 0 0 15px 0; font-size: 18px;">
+            📅 Nouveau rendez-vous
+          </h2>
+          <p style="margin: 8px 0; font-size: 18px; color: #92400e;">
+            <strong>${dateFormatee}</strong>
+          </p>
+          <p style="margin: 8px 0; font-size: 18px; color: #92400e;">
+            <strong>${data.creneau}</strong>
+          </p>
+          <p style="margin: 12px 0 0 0; font-size: 14px; color: #6b7280;">
+            Type : ${typeRdvTexte}
+          </p>
+        </div>
+
+        <!-- Info -->
+        <div style="background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0; border-radius: 5px;">
+          <p style="margin: 0; color: #1e40af; font-size: 14px;">
+            <strong>Information :</strong> Notre équipe commerciale vous
+            recontactera pour confirmer ce nouveau rendez-vous.
+            En cas d'indisponibilité, n'hésitez pas à nous contacter.
+          </p>
+        </div>
+
+        <p style="font-size: 14px; color: #6b7280; margin-top: 25px;">
+          Nous nous excusons pour tout inconvénient causé par ce changement.
+        </p>
+
+        <p style="font-size: 16px; color: #374151; margin-top: 20px;">
+          Cordialement,<br/>
+          <strong style="color: #ea580c;">L'équipe Revolution</strong>
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 10px 10px;">
+        <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+          Cet email a été envoyé automatiquement, merci de ne pas y répondre directement.
+        </p>
+      </div>
+
+    </div>
+  `;
+
+  return this.sendMail({
+    to:      data.email,
+    subject,
+    html,
+    text: `Bonjour ${data.nom}, votre rendez-vous ${typeRdvTexte} pour ${data.entite} a été reporté au ${dateFormatee} à ${data.creneau}.`,
+  });
+}
+
+
 
 
 }

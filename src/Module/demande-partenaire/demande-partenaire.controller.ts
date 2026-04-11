@@ -24,7 +24,8 @@ import { BloquerDateDto } from './dto/bloquer-date.dto';
 import { DebloquerDateDto } from './dto/debloquer-date.dto';
 import { AccepterDemandeDto } from './dto/accepter-demande.dto';
 import { FastifyRequest } from 'fastify';
-import { FastifyFileKV } from '../demande/Types/types';
+import { FastifyFileKV } from '../demande-adherent/Types/types';
+import { ReporterDemandeDto } from './dto/reporter-demande.dto';
 
 @ApiTags('Demandes Partenaire')
 @Controller('demandes-partenaire')
@@ -131,6 +132,23 @@ export class DemandePartenaireController {
     return this.demandePartenaireService.confirmerRendezvous(id, profileUrl);
   }
 
+
+
+  @Patch(':id/refuser')
+  @ApiOperation({ summary: 'Refuser une demande de partenariat' })
+  @ApiResponse({ status: 200, description: 'Demande refusée' })
+  @ApiResponse({ status: 404, description: 'Demande introuvable' })
+  refuserDemande(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('motif') motif?: string
+  ) {
+    return this.demandePartenaireService.refuserDemande(id, motif);
+  }
+
+  // ==========================================
+  // 📅 CONFIRMATION DE RENDEZ-VOUS (ADMIN)
+  // ==========================================
+
   @Patch(':id/accepter')
   @ApiOperation({ summary: 'Accepter une demande partenaire avec upload du contrat' })
   @ApiConsumes('multipart/form-data') // ✅ Permet l'upload de fichiers
@@ -164,23 +182,6 @@ export class DemandePartenaireController {
   }
 
 
-  @Patch(':id/refuser')
-  @ApiOperation({ summary: 'Refuser une demande de partenariat' })
-  @ApiResponse({ status: 200, description: 'Demande refusée' })
-  @ApiResponse({ status: 404, description: 'Demande introuvable' })
-  refuserDemande(
-    @Param('id', ParseIntPipe) id: number,
-    @Body('motif') motif?: string
-  ) {
-    return this.demandePartenaireService.refuserDemande(id, motif);
-  }
-
-  // ==========================================
-  // 📅 CONFIRMATION DE RENDEZ-VOUS (ADMIN)
-  // ==========================================
-
-
-
 
   // ==========================================
   // 🚫 GESTION DES DATES BLOQUÉES (ADMIN)
@@ -210,5 +211,25 @@ debloquerDate(@Body() dto: DebloquerDateDto) {
   @ApiResponse({ status: 400, description: 'Impossible de supprimer cette demande' })
   async remove(@Param('id', ParseIntPipe) id: number) {
     return this.demandePartenaireService.remove(id);
+  }
+
+  @Patch(':id/reporter')
+@ApiOperation({ summary: 'Reporter un rendez-vous partenaire' })
+@ApiResponse({ status: 200, description: 'Rendez-vous reporté avec succès' })
+@ApiResponse({ status: 404, description: 'Demande introuvable' })
+@ApiResponse({ status: 409, description: 'Nouveau créneau déjà réservé' })
+@ApiResponse({ status: 400, description: 'Date invalide ou dans le passé' })
+async reporter(
+  @Param('id', ParseIntPipe) id: number,
+  @Body() dto: ReporterDemandeDto,
+) {
+  return this.demandePartenaireService.reporter(id, dto.nouvelleDateRdv, dto.nouveauCreneau);
+}
+
+  @Get('rendezvous')                                              // ← avant :id !
+  @ApiOperation({ summary: 'Récupérer tous les rendez-vous avec leur email' })
+  @ApiResponse({ status: 200, description: 'Liste des rendez-vous retournée' })
+  findAllRendezvous() {
+    return this.demandePartenaireService.findAllRendezvous();
   }
 }

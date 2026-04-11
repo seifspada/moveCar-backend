@@ -9,31 +9,50 @@ import {
   Query,
   ValidationPipe,
   UsePipes,
+  UseGuards,
+  Req,
 } from '@nestjs/common';
 import { MissionsService } from './missions.service';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { UpdateMissionStatusDto } from './dto/update-mission-status.dto';
 import { ListMissionsQueryDto } from './dto/list-missions-query.dto';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { FastifyRequest } from 'fastify';
 
 @Controller('missions')
 export class MissionsController {
   constructor(private readonly missionsService: MissionsService) {}
 
   // ✅ Endpoint JSON sans fichiers (RECOMMANDÉ POUR VOS TESTS)
-  @Post('creer')
-  @UsePipes(new ValidationPipe({ transform: true }))
-  async creerMission(@Body() createMissionDto: CreateMissionDto) {
-    const mission = await this.missionsService.creerMission(
-      createMissionDto,
-      undefined, // Pas de documents
-    );
+// missions.controller.ts
 
-    return {
-      success: true,
-      message: 'Mission créée avec succès',
-      data: mission,
-    };
-  }
+@Post('creer')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('agent')
+@UsePipes(new ValidationPipe({ transform: true }))
+async creerMission(
+  @Body() createMissionDto: CreateMissionDto,
+  @Req() req: FastifyRequest & { user: any },  // ✅ Fastify
+) {
+  const agentIdFromToken = req.user.agentId;
+  createMissionDto.agentId = agentIdFromToken;
+
+  console.log('🔐 agentId forcé depuis JWT:', agentIdFromToken); // → 30
+
+  const mission = await this.missionsService.creerMission(
+    createMissionDto,
+    undefined,
+  );
+
+  return {
+    success: true,
+    message: 'Mission créée avec succès',
+    data: mission,
+  };
+}
+
 
   @Get()
   @UsePipes(new ValidationPipe({ transform: true }))

@@ -1,5 +1,5 @@
 // src/auth/auth.controller.ts
-import { Controller, Post, Body, Get, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards,Headers } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -9,6 +9,7 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { VerifyResetCodeDto } from './dto/verify-reset-code.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { forgetPasswordDto } from './dto/forget-password.dto';
+import { UnauthorizedException } from '@nestjs/common'; // ✅ AJOUTER SI MANQUANT
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -76,4 +77,24 @@ async getProfile(@CurrentUser() user: any) {
       resetPasswordDto.newPassword,
     );
   }
+
+   @UseGuards(JwtAuthGuard)
+@Post('logout')
+async logout(
+  @Headers('authorization') authorization: string,
+  @Body() body?: any, // ✅ Rendre le body optionnel
+) {
+  console.log('📥 Header reçu:', authorization);
+  
+  const token = authorization?.replace('Bearer ', '');
+  
+  console.log('🔑 Token extrait:', token ? 'Présent' : 'Manquant');
+
+  if (!token) {
+    throw new UnauthorizedException('Token manquant');
+  }
+
+  return this.authService.logout(token);
+}
+
 }

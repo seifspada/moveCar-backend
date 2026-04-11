@@ -1,0 +1,307 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type AdherentPublic {
+  email: String!
+  nom: String!
+  photo: String
+  prenom: String!
+  typePack: String!
+}
+
+type AdminPublic {
+  email: String!
+  nom: String!
+}
+
+type AdresseEntity {
+  adresseComplete: String!
+  id: String!
+  latitude: Float!
+  longitude: Float!
+  nomLieu: String
+  typeLieu: TypeLieu!
+  villeNom: String!
+}
+
+type AgentPublic {
+  email: String!
+  nom: String!
+  photo: String
+  prenom: String!
+}
+
+enum BoiteVitesse {
+  AUTOMATIQUE
+  MANUELLE
+}
+
+type CalculEntity {
+  distanceKm: Float!
+  fraisPeage: Float!
+  id: String!
+  montantTotal: Float!
+}
+
+input CreateReservationInput {
+  """Date de départ (YYYY-MM-DD)"""
+  dateDepart: String!
+
+  """Heure de départ (HH:mm)"""
+  heureDepart: String!
+
+  """ID de la mission (UUID)"""
+  missionId: String!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type DisponibiliteEntity {
+  dateDebut: DateTime!
+  dateDepartMax: DateTime
+  dateFin: DateTime!
+  id: String!
+}
+
+type DocumentEntity {
+  dateCreation: DateTime!
+  dateDebutValidite: DateTime
+  dateFinValidite: DateTime
+  dateModification: DateTime!
+  fichiers: [FichierDocumentEntity!]!
+  id: Int!
+  numero: String
+  statut: String
+  typeDocument: String!
+}
+
+type FichierDocumentEntity {
+  cheminFichier: String!
+  dateCreation: DateTime!
+  dateModification: DateTime!
+  id: Int!
+}
+
+type MissionCardType {
+  dateDebut: DateTime!
+  dateDepartMax: DateTime
+  distanceKm: Float!
+  fraisPeage: Float!
+  id: String!
+  montantTotal: Float!
+  typeCarburant: String!
+  typeVehicule: String!
+  villeArrivee: String!
+  villeDepart: String!
+}
+
+type MissionEntity {
+  adresseArrivee: AdresseEntity!
+  adresseDepart: AdresseEntity!
+  calculs: CalculEntity
+  commentaire: String
+  dateCreation: DateTime!
+  dateModification: DateTime!
+  disponibilite: DisponibiliteEntity
+  documents: [DocumentEntity!]!
+  id: ID!
+  notifications: [NotificationEntity!]!
+  partenaire: PartenaireMissionEntity!
+  statut: StatutMission!
+  vehicule: VehiculeMissionEntity!
+}
+
+type MissionsPaginatedResponse {
+  missions: [MissionCardType!]!
+  page: Int!
+  pageSize: Int!
+  total: Int!
+  totalPages: Int!
+}
+
+type Mutation {
+  """Annuler une réservation (adhérent)"""
+  cancelReservation(id: String!): ReservationMissionEntity!
+
+  """Confirmer une réservation (partenaire)"""
+  confirmReservation(id: String!): ReservationMissionEntity!
+
+  """Créer une nouvelle réservation de mission"""
+  createReservation(input: CreateReservationInput!): ReservationResponse!
+
+  """Refuser une réservation avec motif (partenaire)"""
+  refuseReservation(id: String!, motifRefus: String!): ReservationMissionEntity!
+}
+
+type NotificationEntity {
+  actif: Boolean!
+  id: String!
+  nomContact: String
+  telephoneContact: String
+  typeNotification: String!
+}
+
+type PartenaireMissionEntity {
+  email: String!
+  entiteAgence: String
+  entiteGroupe: String!
+  id: Int!
+  logo: String
+  nom: String!
+  prenom: String!
+  telephone: String!
+}
+
+type PartenaireNavbar {
+  email: String!
+  entite: String!
+  photo: String
+}
+
+type Query {
+  adherentMe: AdherentPublic!
+  adminMe: AdminPublic!
+  agentMe: AgentPublic!
+
+  """Récupérer toutes les réservations (admin/partenaire)"""
+  allReservations: [ReservationMissionEntity!]!
+  getMissionById(id: String!): MissionEntity
+  getMissionsByAgence(agenceId: Int!): [MissionCardType!]!
+  missionsForCards: [MissionCardType!]!
+
+  """Récupérer toutes les réservations de l'adhérent connecté"""
+  myReservations: [ReservationMissionEntity!]!
+  partenaireNavbar: PartenaireNavbar!
+
+  """Récupérer une réservation par son ID"""
+  reservationById(id: String!): ReservationMissionEntity!
+  searchMissions(page: Int = 1, pageSize: Int = 20, search: String): MissionsPaginatedResponse!
+  searchMissionsByPosition(filters: SearchByPositionInput!, page: Int, pageSize: Int): MissionsPaginatedResponse!
+  searchMissionsByTrajet(filters: SearchByTrajetInput!, page: Int, pageSize: Int): MissionsPaginatedResponse!
+}
+
+type ReservationMissionEntity {
+  adherentId: Int!
+  commentaireAdherent: String
+  commentairePartenaire: String
+  dateArrivee: DateTime!
+  dateCreation: DateTime!
+  dateDepart: DateTime!
+  dateModification: DateTime!
+  dateRefus: DateTime
+  dateValidation: DateTime
+  distanceKm: Float!
+  dureeEstimee: Int
+  fraisPeage: Float!
+  heureArrivee: String!
+  heureDepart: String!
+  id: ID!
+  mission: MissionEntity!
+  missionId: String!
+  montantTotal: Float!
+  motifRefus: String
+  numeroReservation: String!
+  statut: StatutReservation!
+}
+
+type ReservationResponse {
+  code: String
+  message: String!
+  reservation: ReservationMissionEntity
+  success: Boolean!
+}
+
+input SearchByPositionInput {
+  """Latitude GPS"""
+  latitude: Float!
+
+  """Longitude GPS"""
+  longitude: Float!
+
+  """Rayon de recherche en km"""
+  rayon: Int!
+
+  """Nom de la ville de recherche"""
+  villeNom: String!
+}
+
+input SearchByTrajetInput {
+  dateDepart: DateTime
+  dateDepartMax: DateTime
+  latitudeArrivee: Float!
+  latitudeDepart: Float!
+  longitudeArrivee: Float!
+  longitudeDepart: Float!
+  rayon: Int!
+  villeArriveeNom: String!
+  villeDepartNom: String!
+}
+
+enum StatutMission {
+  ARRIVEE
+  CONFIRMEE
+  EN_ATTENTE
+  EN_COURS
+  RESERVATION_ANNULEE
+  RESERVEE
+}
+
+"""Statut de la réservation"""
+enum StatutReservation {
+  ANNULEE
+  CONFIRMEE
+  EN_ATTENTE
+  REFUSEE
+  TERMINEE
+}
+
+enum TypeCarburant {
+  DIESEL
+  ELECTRIQUE
+  ESSENCE
+  HYBRIDE
+}
+
+enum TypeLieu {
+  AEROPORT
+  AGENCE
+  AUTRE
+  CONCESSION
+  DOMICILE
+  ENTREPRISE
+  GARE
+  HOTEL
+  PARC_AUTO
+  PARTICULIER
+}
+
+enum TypeVehicule {
+  BERLINE
+  CABRIOLET
+  CITADINE
+  COMPACTE
+  LUXE
+  MONOSPACE
+  VU_3M3
+  VU_6M3
+  VU_9M3
+  VU_12M3
+  VU_15M3
+  VU_20M3
+  VU_25M3
+  VU_30M3
+}
+
+type VehiculeMissionEntity {
+  boiteVitesse: BoiteVitesse!
+  id: String!
+  immatriculation: String!
+  marqueModele: String!
+  nombrePlaces: Int!
+  typeCarburant: TypeCarburant!
+  typeVehicule: TypeVehicule!
+}

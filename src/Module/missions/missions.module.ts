@@ -5,10 +5,15 @@ import { MissionsController } from './missions.controller';
 import { MissionsService } from './missions.service';
 import { RouteCalculatorModule } from '../route-calculator/route-calculator.module';
 import { PrismaModule } from 'src/prisma/prisma.module';
-
+import { MissionsResolver } from './missions.resolver';
+import { AlertesModule } from '../alertes/alertes.module';
+import { GeoService } from '../geo/geo.service';
+import { GeoModule } from '../geo/geo.module';
 @Module({
   imports: [
     PrismaModule,
+    AlertesModule,
+    GeoModule ,
     RouteCalculatorModule,
     HttpModule,  // ✅ Ajouter HttpModule
     MulterModule.register({
@@ -16,7 +21,7 @@ import { PrismaModule } from 'src/prisma/prisma.module';
     }),
   ],
   controllers: [MissionsController],
-  providers: [MissionsService],
+  providers: [MissionsService,MissionsResolver],
   exports: [MissionsService],
 })
 export class MissionsModule {}

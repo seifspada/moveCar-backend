@@ -14,37 +14,33 @@ import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateMissionDto {
-  // ✅ CORRIGÉ : partenaireId en number avec transformation automatique
- @ApiProperty({ 
+@ApiProperty({ 
   example: 1,
-  description: 'ID du partenaire',
+  description: 'ID de l\'agent',  // ✅ Remplacé
   type: Number
 })
 @Transform(({ value }) => {
-  // ✅ Gérer null/undefined
   if (value == null) {
-    throw new Error('partenaireId est requis');
+    throw new Error('agentId est requis');  // ✅ Remplacé
   }
   
-  // ✅ Si c'est déjà un number
   if (typeof value === 'number') {
     return value;
   }
   
-  // ✅ Si c'est une string
   if (typeof value === 'string') {
     const parsed = parseInt(value, 10);
     if (isNaN(parsed)) {
-      throw new Error('partenaireId doit être un nombre valide');
+      throw new Error('agentId doit être un nombre valide');  // ✅ Remplacé
     }
     return parsed;
   }
   
-  throw new Error('partenaireId doit être un nombre');
+  throw new Error('agentId doit être un nombre');  // ✅ Remplacé
 })
 @IsInt()
 @Type(() => Number)
-partenaireId: number;
+agentId: number;  // ✅ Déjà correct
 
   // ==================== ADRESSE DÉPART ====================
   @ApiProperty({ 
@@ -175,14 +171,14 @@ partenaireId: number;
   // ==================== DISPONIBILITÉ ====================
   @ApiProperty({ 
     example: '2024-02-15T09:00:00.000Z',
-    description: 'Date et heure de début de disponibilité'
+    description: 'Date et heure de début de disponibilité (doit permettre d\'arriver à temps)'
   })
   @IsDateString()
   dateDebut: string;
 
   @ApiProperty({ 
     example: '2024-02-15T18:00:00.000Z',
-    description: 'Date et heure de fin de disponibilité'
+    description: 'Date et heure d\'arrivée souhaitée'
   })
   @IsDateString()
   dateFin: string;
