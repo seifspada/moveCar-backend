@@ -25,7 +25,8 @@ export class DocumentProcessingService {
         texteExtrait = data.text ?? '';
         console.log('[OCR] pdf-parse longueur :', texteExtrait.length);
       } catch (err) {
-        console.warn('[OCR] pdf-parse échoué :', err.message);
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn('[OCR] pdf-parse échoué :', msg);
       }
 
       // Étape 2 — PDF image → PNG → Tesseract
@@ -62,7 +63,8 @@ export class DocumentProcessingService {
       console.log('[OCR] Tesseract OK — longueur :', text.length);
       return text;
     } catch (err) {
-      console.warn('[OCR] Tesseract échoué :', err.message);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[OCR] Tesseract échoué :', msg);
       return '';
     } finally {
       if (worker) await worker.terminate();
@@ -92,11 +94,61 @@ export class DocumentProcessingService {
       console.log('[OCR] Tesseract PDF-img OK — longueur :', text.length);
       return text;
     } catch (err) {
-      console.warn('[OCR] pdf-to-img/Tesseract échoué :', err.message);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[OCR] pdf-to-img/Tesseract échoué :', msg);
       return '';
     } finally {
       if (worker) await worker.terminate();
     }
+  }
+
+  // ── Helpers dates ─────────────────────────────────────────────
+  private addMonths(isoDate: string, months: number): string {
+    const date = new Date(`${isoDate}T00:00:00`);
+    date.setMonth(date.getMonth() + months);
+    return date.toISOString().split('T')[0];
+  }
+
+  private todayIso(): string {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  /**
+   * Extrait une date en toutes lettres depuis le texte OCR normalisé
+   * ex : "a jour au 8 octobre 2019" → "2019-10-08"
+   */
+  private extractLiteralDate(texteNorm: string): string | null {
+    const MOIS: Record<string, string> = {
+      janvier: '01', fevrier: '02', mars:      '03',
+      avril:   '04', mai:     '05', juin:      '06',
+      juillet: '07', aout:    '08', septembre: '09',
+      octobre: '10', novembre:'11', decembre:  '12',
+    };
+
+    const moisPattern = Object.keys(MOIS).join('|');
+    const regex = new RegExp(
+      `(?:a jour au|mis a jour au|delivre le|au|du)?\\s*(\\d{1,2})\\s+(${moisPattern})\\s+(\\d{4})`,
+      'i',
+    );
+
+    // texteNorm est déjà sans accents et en minuscules
+    const normalized = texteNorm
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+
+    const match = normalized.match(regex);
+    if (!match) return null;
+
+    const day   = match[1].padStart(2, '0');
+    const month = MOIS[match[2].toLowerCase()];
+    const year  = match[3];
+
+    if (!month) return null;
+
+    const iso = `${year}-${month}-${day}`;
+    console.log(`[OCR] ✅ Date littérale : "${match[0].trim()}" → ${iso}`);
+    return iso;
   }
 
   // ── Parsing des dates ─────────────────────────────────────────
@@ -160,7 +212,7 @@ export class DocumentProcessingService {
 
     switch (typeDocument) {
 
-      // ── RC Professionnelle ──────────────────────────────────
+      // ── RC Professionnelle ────────────────────────────────────
       case 'assuranceRcPro': {
         const periode = findPeriode([
           'valable[^0-9]*',
@@ -186,7 +238,7 @@ export class DocumentProcessingService {
         break;
       }
 
-      // ── RC Circulation ──────────────────────────────────────
+      // ── RC Circulation ────────────────────────────────────────
       case 'assuranceRcCirculation': {
         const periode = findPeriode([
           'valable[^0-9]*',
@@ -213,17 +265,48 @@ export class DocumentProcessingService {
         break;
       }
 
-      // ✅ case 'kbis' supprimé
+      // ── Kbis ──────────────────────────────────────────────────
+      case 'kbis': {
+        // Tentative 1 : date numérique DD/MM/YYYY près d'un label
+        dateDebut = findDateNearLabel([
+          'a jour au',
+          'mis a jour au',
+          'date de mise a jour',
+          'delivre le',
+          'extrait du',
+          "date d'immatriculation",
+          'immatriculation le',
+          'immatriculation',
+        ]);
+
+        // ✅ Tentative 2 : date en toutes lettres ("8 octobre 2019")
+        if (!dateDebut) {
+          dateDebut = this.extractLiteralDate(texteNorm);
+        }
+
+        // Fallback : date du jour
+        if (!dateDebut) {
+          dateDebut = this.todayIso();
+        }
+
+        dateFin = this.addMonths(dateDebut, 3);
+        console.log(`[OCR] Kbis → dateDebut=${dateDebut} | dateFin=${dateFin} (+3 mois)`);
+        break;
+      }
+
       default:
         throw new InternalServerErrorException(
           `Type non supporté : ${typeDocument}. ` +
-          `Valeurs acceptées : assuranceRcPro, assuranceRcCirculation`,
+          `Valeurs acceptées : assuranceRcPro, assuranceRcCirculation, kbis`,
         );
     }
 
     const confidence =
-      dateDebut && dateFin ? 0.85 :
-      dateDebut            ? 0.5  : 0.0;
+      typeDocument === 'kbis'
+        ? (dateDebut !== this.todayIso() ? 0.9 : 0.6)
+        : dateDebut && dateFin ? 0.85
+        : dateDebut            ? 0.5
+        : 0.0;
 
     console.log(
       `[OCR] type=${typeDocument} | debut=${dateDebut} | fin=${dateFin} | confidence=${confidence}`,

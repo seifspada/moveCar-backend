@@ -109,12 +109,12 @@ async create(dto: CreateAgencyDto, partenaireId: number): Promise<AgenceType> {
         codePartenaire: partenaire.codePartenaire ?? '',
       });
     } catch (error) {
-      console.error('❌ Erreur envoi email agence créée:', {
-        agenceId: agence.id,
-        email: agence.email,
-        error: error.message,
-      });
-    }
+  console.error('❌ Erreur envoi email agence créée:', {
+    agenceId: agence.id,
+    email: agence.email,
+    error: error instanceof Error ? error.message : String(error), // ✅
+  });
+}
   }
 
   return agence;
@@ -300,6 +300,16 @@ async resendInvitation(
   return { message: 'Email renvoyé avec succès' };
 }
 
+
+// agence.service.ts
+async findAgencesWithAgentsByPartenaire(partenaireId: number) {
+  return this.prisma.agence.findMany({
+    where: { partenaireId },
+    include: {
+      agents: true,
+    },
+  });
+}
 
 
 }

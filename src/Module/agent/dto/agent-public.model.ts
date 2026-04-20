@@ -1,17 +1,22 @@
-// backend/src/Module/adherent/models/adherent-public.model.ts
-import { ObjectType, Field } from '@nestjs/graphql';
+import { ObjectType, Field, Int } from '@nestjs/graphql';
 
 @ObjectType()
 export class AgentPublic {
+  @Field(() => Int)
+  id: number;          // ✅ AJOUTER
+
+  @Field()
+  email: string;
+
   @Field()
   nom: string;
 
   @Field()
   prenom: string;
 
-  @Field()
-  email: string;
-
   @Field({ nullable: true })
-  photo: string;
+  photo?: string | null;
+
+  @Field(() => Int, { nullable: true })
+  agenceId?: number | null;  // ✅ AJOUTER
 }

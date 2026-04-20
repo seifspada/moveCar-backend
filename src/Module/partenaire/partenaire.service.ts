@@ -349,38 +349,41 @@ async remove(id: number) {
   });
   const missionIds = missions.map((m) => m.id);
 
-  // 3. Supprimer les réservations des missions (RESTRICT ❌ → en premier)
+  // 3. Supprimer les réservations des missions
   if (missionIds.length > 0) {
     await this.prisma.reservationMission.deleteMany({
       where: { missionId: { in: missionIds } },
     });
   }
 
-  // 4. Supprimer les missions (cascade → disponibilites, notifications, calculs, documents ✅)
+  // 4. Supprimer les missions
   await this.prisma.mission.deleteMany({
     where: { partenaireId: id },
   });
 
-  // 5. Supprimer les véhicules (maintenant libres car missions supprimées)
-  await this.prisma.vehicule.deleteMany({
-    where: { partenaireId: id },
-  });
-
-  // 6. Récupérer les agences
+  // 5. Récupérer les agences du partenaire
   const agences = await this.prisma.agence.findMany({
     where: { partenaireId: id },
     select: { id: true },
   });
   const agenceIds = agences.map((a) => a.id);
 
-  // 7. Récupérer les userIds des agents
+  // 6. Récupérer les agents des agences
   const agents = await this.prisma.agent.findMany({
     where: { agenceId: { in: agenceIds } },
-    select: { userId: true },
+    select: { id: true, userId: true },
   });
+  const agentIds    = agents.map((a) => a.id);
   const agentUserIds = agents
     .map((a) => a.userId)
     .filter((uid): uid is number => uid !== null);
+
+  // 7. ✅ Supprimer les véhicules via agentId (partenaireId n'existe plus)
+  if (agentIds.length > 0) {
+    await this.prisma.vehicule.deleteMany({
+      where: { agentId: { in: agentIds } },
+    });
+  }
 
   // 8. Supprimer les agents
   await this.prisma.agent.deleteMany({
@@ -413,7 +416,6 @@ async remove(id: number) {
     where: { id },
   });
 }
-
 
 
 

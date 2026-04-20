@@ -83,12 +83,14 @@ enum TypeReservation {
 }
 
 enum StatutReservation {
-  EN_ATTENTE    // Adhérent a réservé, attend validation
-  CONFIRMEE     // Réservation validée
-  REFUSEE       // Réservation refusée
-  ANNULEE       // Annulée par adhérent ou partenaire
-  TERMINEE      // Mission terminée
+  EN_ATTENTE
+  ACCEPTED_BY_AGENT       // ← nouveau
+  CONFIRMED_BY_ADHERENT   // ← nouveau (remplace CONFIRMEE)
+  ANNULATION_DEMANDEE      // ✅ nouveau
+  ANNULEE
+  REFUSEE
 }
+
 
 enum TypeAlerte {
   GEOGRAPHIQUE  // Type 1 : 1 Ville + Rayon
@@ -128,6 +130,7 @@ model User {
 
 
   alertes           AlerteGeographique[]
+  historiqueAnnulations HistoriqueAnnulation[] // ✅ ajouter cette ligne
 
 
   @@index([roleId])
@@ -272,7 +275,7 @@ model Document {
 
   dateCreation     DateTime @default(now())
   dateModification DateTime @updatedAt
-
+  
   @@index([demandeAdhesionId])
   @@index([missionId])
   @@index([typeDocument])
@@ -357,8 +360,7 @@ model Partenaire {
   adresseAgence String? @db.VarChar(255)
   ville         String? @db.VarChar(100)
   logo          String? @db.VarChar(255)
-  photoUrl      String? @db.VarChar(500)  // ✅ AJOUTÉ
-
+  photoUrl      String? @db.VarChar(500)
 
   estActif Boolean @default(false)
 
@@ -370,13 +372,12 @@ model Partenaire {
 
   demandeInitiale DemandePartenaire? @relation("DemandeToPartenaire")
 
-  userId    Int?    @unique
-  user      User?   @relation(fields: [userId], references: [id], onDelete: Cascade) // ✅ User?
+  userId Int?  @unique
+  user   User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  vehicules Vehicule[]
-  missions  Mission[]
-  agences   Agence[]
-  agents    Agent[]
+  missions Mission[]  // ✅ relation inverse obligatoire même si optionnelle
+  agences  Agence[]
+  agents   Agent[]
 
   @@index([email])
   @@index([estActif])
@@ -556,6 +557,7 @@ enum StatutMission {
   EN_COURS            // Voiture en route
   ARRIVEE             // Voiture arrivée à destination
 }
+
 enum TypeDocument {
   CARTE_IDENTITE
   PERMIS
@@ -581,6 +583,7 @@ enum StatutDocument {
 // 🚗 VEHICULE
 // ============================================
 
+// ✅ Après — relation sur agentId
 model Vehicule {
   id              String        @id @default(cuid())
   typeVehicule    TypeVehicule
@@ -593,15 +596,14 @@ model Vehicule {
   dateCreation     DateTime @default(now())
   dateModification DateTime @updatedAt
 
-  partenaireId Int
-  partenaire   Partenaire @relation(fields: [partenaireId], references: [id],onDelete: Cascade)
-  missions     Mission[] // ✅ Saut de ligne ajouté
+  agentId  Int
+  agent    Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  missions Mission[]
 
-  @@index([partenaireId])
+  @@index([agentId])
   @@index([immatriculation])
   @@map("vehicules")
 }
-
 // ============================================
 // 📍 ADRESSE
 // ============================================
@@ -640,40 +642,43 @@ model Mission {
   dateCreation     DateTime @default(now())
   dateModification DateTime @updatedAt
 
-  partenaireId Int
-  partenaire   Partenaire @relation(fields: [partenaireId], references: [id], onDelete: Cascade)
+  // ✅ Agent = responsable principal (obligatoire)
+  agentId Int
+  agent   Agent @relation(fields: [agentId], references: [id], onDelete: Restrict)
 
-  vehicule   Vehicule @relation(fields: [vehiculeId], references: [id])
-  vehiculeId String
+  // ✅ Partenaire = facturation uniquement (optionnel)
+  partenaireId Int?
+  partenaire   Partenaire? @relation(fields: [partenaireId], references: [id], onDelete: SetNull)
 
-  adresseDepart   Adresse @relation("MissionDepart", fields: [adresseDepartId], references: [id])
-  adresseDepartId String
-
-  adresseArrivee   Adresse @relation("MissionArrivee", fields: [adresseArriveeId], references: [id])
-  adresseArriveeId String
-
-  // ✅ AJOUTER CES 2 LIGNES
+  // ✅ Agence (optionnel)
   agenceId Int?
   agence   Agence? @relation(fields: [agenceId], references: [id], onDelete: SetNull)
 
-  // ✅ AJOUTER CETTE LIGNE
-  agentId Int?
-  agent   Agent?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  // ✅ Véhicule
+  vehiculeId String
+  vehicule   Vehicule @relation(fields: [vehiculeId], references: [id])
 
+  // ✅ Adresses
+  adresseDepartId String
+  adresseDepart   Adresse @relation("MissionDepart", fields: [adresseDepartId], references: [id])
+
+  adresseArriveeId String
+  adresseArrivee   Adresse @relation("MissionArrivee", fields: [adresseArriveeId], references: [id])
+
+  // ✅ Relations enfants
   disponibilite DisponibiliteMission?
   notifications NotificationMission[]
   calculs       CalculMission?
   documents     Document[]
   reservations  ReservationMission[]
 
+  @@index([agentId])
   @@index([partenaireId])
+  @@index([agenceId])
   @@index([vehiculeId])
   @@index([statut])
-  @@index([agenceId])  // ✅ AJOUTER
-  @@index([agentId])   // ✅ AJOUTER
   @@map("missions")
 }
-
 
 // ============================================
 // ⏰ DISPONIBILITE
@@ -809,45 +814,42 @@ model NotificationAlerte {
 model ReservationMission {
   id String @id @default(cuid())
 
-  // Relations principales
   missionId String
   mission   Mission @relation(fields: [missionId], references: [id], onDelete: Restrict)
 
   adherentId Int
   adherent   Adherent @relation(fields: [adherentId], references: [id], onDelete: Restrict)
 
-  // Statut
   statut            StatutReservation @default(EN_ATTENTE)
-  numeroReservation String            @unique @db.VarChar(50) // Ex: RES-2026-00001
+  numeroReservation String            @unique @db.VarChar(50)
 
-  // ✅ Dates/heures de départ (saisies par l'adhérent)
-  dateDepart  DateTime // Date de départ choisie
-  heureDepart String   @db.VarChar(5) // Format "HH:MM"
+  dateDepart  DateTime
+  heureDepart String   @db.VarChar(5)
 
-  // ✅ Dates/heures d'arrivée estimées (calculées automatiquement)
-  dateArrivee  DateTime // Date d'arrivée estimée
-  heureArrivee String   @db.VarChar(5) // Format "HH:MM"
+  dateArrivee  DateTime
+  heureArrivee String   @db.VarChar(5)
 
-  // Durée estimée (en minutes)
-  dureeEstimee Int? // Ex: 180 minutes = 3h
+  dureeEstimee Int?
 
-  // Commentaire optionnel de l'adhérent
   commentaireAdherent String? @db.Text
+  commentaireAgent    String? @db.Text
 
-  // Réponse du partenaire (après validation)
-  commentairePartenaire String? @db.Text
-  dateValidation        DateTime?
-  dateRefus             DateTime?
-  motifRefus            String? @db.Text
+  dateValidation   DateTime?
+  dateRefus        DateTime?
+  motifRefus       String?   @db.Text
 
-  // Montants (copiés depuis mission.calculs au moment de la réservation)
   montantTotal Decimal @db.Decimal(10, 2)
   fraisPeage   Decimal @db.Decimal(10, 2)
   distanceKm   Decimal @db.Decimal(10, 2)
 
-  // Traçabilité
-  dateCreation     DateTime @default(now())
-  dateModification DateTime @updatedAt
+  dateCreation             DateTime  @default(now())
+  dateModification         DateTime  @updatedAt
+  dateAcceptationAgent     DateTime?
+  dateConfirmationAdherent DateTime?
+  dateAnnulation           DateTime?
+  motifAnnulation          String?   @db.Text
+  annulePar                String?   // "ADHERENT" | "AGENT"
+  statutPrecedent          StatutReservation? // ✅ pour restauration après refus demande annulation
 
   @@index([missionId])
   @@index([adherentId])
@@ -902,15 +904,33 @@ model Agent {
   userId Int  @unique
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  agenceId Int?     // ✅ nullable — permet disconnect
-  agence   Agence?  @relation(fields: [agenceId], references: [id], onDelete: SetNull) // ✅ SetNull au lieu de Cascade
+  agenceId Int?
+  agence   Agence? @relation(fields: [agenceId], references: [id], onDelete: SetNull)
 
   partenaireId Int?
   partenaire   Partenaire? @relation(fields: [partenaireId], references: [id], onDelete: SetNull)
 
-  missions Mission[]  
+  vehicules Vehicule[]  // ✅ déjà présent
+  missions  Mission[]   // ✅ relation inverse obligatoire
+
   @@index([email])
   @@index([isActive])
   @@index([agenceId])
   @@map("agents")
+}
+
+model HistoriqueAnnulation {
+  id            String   @id @default(cuid())
+  userId        Int
+  mois          Int      // 1-12
+  annee         Int      // ex: 2026
+  nbAnnulations Int      @default(0)
+  limite        Int      @default(5)
+  dateCreation  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, mois, annee])
+  @@index([userId])
+  @@map("historique_annulations")
 }

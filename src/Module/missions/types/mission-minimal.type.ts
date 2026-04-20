@@ -6,6 +6,9 @@ export class MissionCardType {
   @Field()
   id: string;
 
+  @Field({ nullable: true }) // ✅ Ajouté
+  statut: string;
+
   @Field()
   typeVehicule: string;
 
@@ -31,5 +34,5 @@ export class MissionCardType {
   dateDebut: Date;
 
   @Field({ nullable: true })
-  dateDepartMax: Date;   // ✅ à la place de dateFin
+  dateDepartMax: Date;
 }

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { io, Socket } from 'socket.io-client';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import { DemandeAdherentGateway } from './demande-adherent.gateway';
 
 describe('DemandeAdherentGateway', () => {
@@ -14,7 +15,7 @@ describe('DemandeAdherentGateway', () => {
     }).compile();
 
     app = module.createNestApplication();
-    app.useWebSocketAdapter(new (require('@nestjs/platform-socket.io').IoAdapter)(app));
+    app.useWebSocketAdapter(new IoAdapter(app));
     await app.listen(3001);
 
     gateway = module.get<DemandeAdherentGateway>(DemandeAdherentGateway);
@@ -33,7 +34,6 @@ describe('DemandeAdherentGateway', () => {
   });
 
   afterEach(() => {
-    // Nettoyer les listeners après chaque test
     clientSocket.removeAllListeners('new-demande');
   });
 
@@ -48,38 +48,56 @@ describe('DemandeAdherentGateway', () => {
   });
 
   it('✅ doit émettre new-demande avec email correct', (done) => {
-    const testEmail = 'adherent@gmail.com';
+    const payload = {
+      email: 'adherent@gmail.com',
+      id: 1,
+      nom: 'Dupont',
+      prenom: 'Jean',
+      message: 'Nouvelle demande reçue',
+    };
 
     clientSocket.on('new-demande', (data) => {
-      expect(data).toEqual({ email: testEmail });
+      expect(data.email).toBe(payload.email);  // ✅ vérifie juste email
       done();
     });
 
-    gateway.notifyNewDemande(testEmail);
+    gateway.notifyNewDemande(payload);  // ✅ objet complet
   });
 
   it('✅ doit émettre new-demande avec la propriété email', (done) => {
     clientSocket.on('new-demande', (data) => {
       expect(data).toHaveProperty('email');
+      expect(data).toHaveProperty('id');
+      expect(data).toHaveProperty('nom');
+      expect(data).toHaveProperty('prenom');
       done();
     });
 
-    gateway.notifyNewDemande('test@example.com');
+    gateway.notifyNewDemande({
+      email: 'test@example.com',
+      id: 2,
+      nom: 'Test',
+      prenom: 'User',
+      message: 'Nouvelle demande reçue',
+    });
   });
 
   it('✅ doit émettre plusieurs fois avec des emails différents', (done) => {
-    const emails = ['premier@gmail.com', 'deuxieme@gmail.com'];
+    const payloads = [
+      { email: 'premier@gmail.com', id: 1, nom: 'A', prenom: 'B', message: 'msg' },
+      { email: 'deuxieme@gmail.com', id: 2, nom: 'C', prenom: 'D', message: 'msg' },
+    ];
     const received: string[] = [];
 
     clientSocket.on('new-demande', (data) => {
       received.push(data.email);
       if (received.length === 2) {
-        expect(received).toEqual(emails);
+        expect(received).toEqual(payloads.map((p) => p.email));
         done();
       }
     });
 
-    gateway.notifyNewDemande(emails[0]);
-    gateway.notifyNewDemande(emails[1]);
+    gateway.notifyNewDemande(payloads[0]);
+    gateway.notifyNewDemande(payloads[1]);
   });
 });

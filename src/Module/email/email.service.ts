@@ -1692,6 +1692,113 @@ async sendReportRendezvousPartenaire(data: {
 }
 
 
+async sendRefusReservation(data: {
+  email: string;
+  nomAdherent: string;
+  numeroReservation: string;
+  missionTitre: string;
+  dateReservation: Date;
+  motifRefus: string;
+}): Promise<void> {
+  const dateFormatee = new Date(data.dateReservation).toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    year:    'numeric',
+    month:   'long',
+    day:     'numeric',
+  });
+
+  const subject = `Votre réservation #${data.numeroReservation} a été refusée`;
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+
+      <!-- Header -->
+      <div style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 28px;">Revolution</h1>
+        <p style="color: #fee2e2; margin: 10px 0 0 0;">Réservation refusée</p>
+      </div>
+
+      <!-- Body -->
+      <div style="background-color: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none;">
+        <h2 style="color: #b91c1c; margin-top: 0;">
+          ❌ Votre réservation a été refusée
+        </h2>
+
+        <p style="font-size: 16px; line-height: 1.6; color: #374151;">
+          Bonjour <strong>${data.nomAdherent}</strong>,
+        </p>
+
+        <p style="font-size: 16px; line-height: 1.6; color: #374151;">
+          Nous vous informons que votre réservation pour la mission
+          <strong>${data.missionTitre}</strong> du
+          <strong>${dateFormatee}</strong> a malheureusement été refusée.
+        </p>
+
+        <!-- Détails réservation -->
+        <div style="background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%); border: 2px solid #ef4444; padding: 25px; margin: 25px 0; border-radius: 10px;">
+          <h3 style="color: #b91c1c; margin: 0 0 15px 0; font-size: 16px;">
+            📋 Détails de la réservation
+          </h3>
+          <p style="margin: 6px 0; font-size: 15px; color: #7f1d1d;">
+            <strong>Numéro :</strong> #${data.numeroReservation}
+          </p>
+          <p style="margin: 6px 0; font-size: 15px; color: #7f1d1d;">
+            <strong>Mission :</strong> ${data.missionTitre}
+          </p>
+          <p style="margin: 6px 0; font-size: 15px; color: #7f1d1d;">
+            <strong>Date :</strong> ${dateFormatee}
+          </p>
+        </div>
+
+        <!-- Motif de refus -->
+        <div style="background-color: #fff7ed; border-left: 4px solid #f97316; padding: 20px; margin: 20px 0; border-radius: 5px;">
+          <p style="margin: 0 0 8px 0; color: #c2410c; font-size: 15px;">
+            <strong>💬 Motif du refus :</strong>
+          </p>
+          <p style="margin: 0; color: #374151; font-size: 15px; line-height: 1.6; font-style: italic;">
+            "${data.motifRefus}"
+          </p>
+        </div>
+
+        <!-- Info contact -->
+        <div style="background-color: #dbeafe; border-left: 4px solid #3b82f6; padding: 15px; margin: 20px 0; border-radius: 5px;">
+          <p style="margin: 0; color: #1e40af; font-size: 14px;">
+            <strong>Information :</strong> Si vous pensez que cette décision
+            est incorrecte ou souhaitez plus d'informations,
+            n'hésitez pas à contacter notre équipe.
+          </p>
+        </div>
+
+        <p style="font-size: 14px; color: #6b7280; margin-top: 25px;">
+          Nous vous remercions de votre compréhension et espérons pouvoir
+          vous accompagner lors de vos prochaines réservations.
+        </p>
+
+        <p style="font-size: 16px; color: #374151; margin-top: 20px;">
+          Cordialement,<br/>
+          <strong style="color: #ea580c;">L'équipe Revolution</strong>
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 10px 10px;">
+        <p style="margin: 0; color: #9ca3af; font-size: 12px;">
+          Cet email a été envoyé automatiquement, merci de ne pas y répondre directement.
+        </p>
+      </div>
+
+    </div>
+  `;
+
+  return this.sendMail({
+    to:      data.email,
+    subject,
+    html,
+    text: `Bonjour ${data.nomAdherent}, votre réservation #${data.numeroReservation} pour la mission "${data.missionTitre}" du ${dateFormatee} a été refusée. Motif : ${data.motifRefus}.`,
+  });
+}
+
+
 
 
 }

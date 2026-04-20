@@ -115,17 +115,53 @@ export class UserService {
       throw error;
     }
   }
+async remove(id: number) {
+  await this.findOne(id);
 
-  async remove(id: number) {
-    await this.findOne(id);
-
-    return this.prisma.user.delete({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
+  return this.prisma.$transaction(async (tx) => {
+    const adherent = await tx.adherent.findFirst({
+      where: { userId: id },
+      select: { id: true, demandeAdhesionId: true },
     });
-  }
+
+    if (adherent?.demandeAdhesionId) {
+      const docIds = (
+        await tx.document.findMany({
+          where: { demandeAdhesionId: adherent.demandeAdhesionId },
+          select: { id: true },
+        })
+      ).map((d) => d.id);
+
+      if (docIds.length > 0) {
+        await tx.fichierDocument.deleteMany({
+          where: { documentId: { in: docIds } },
+        });
+      }
+
+      await tx.document.deleteMany({
+        where: { demandeAdhesionId: adherent.demandeAdhesionId },
+      });
+    }
+
+    if (adherent) {
+      // ✅ Supprimer reservations_mission AVANT adherent
+      await tx.$executeRaw`
+        DELETE FROM reservations_mission WHERE "adherentId" = ${adherent.id}
+      `;
+
+      await tx.adherent.delete({ where: { id: adherent.id } });
+    }
+
+    if (adherent?.demandeAdhesionId) {
+      await tx.demandeAdhesion.delete({
+        where: { id: adherent.demandeAdhesionId },
+      });
+    }
+
+    return tx.user.delete({
+      where: { id },
+      select: { id: true, name: true, email: true },
+    });
+  });
+}
 }

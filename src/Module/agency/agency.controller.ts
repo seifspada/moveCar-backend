@@ -129,6 +129,7 @@ resendInvitation(
 
 
 @UseGuards(JwtAuthGuard)
+  @Roles('PARTENAIRE', 'ADMIN')
 @ApiBearerAuth()
 @Patch(':id/change-agent')
 @ApiOperation({ summary: 'Changer l\'agent d\'une agence' })
@@ -138,6 +139,14 @@ changeAgent(
   @Req() req: any,
 ) {
   return this.agencyService.changeAgent(id, body.email, req.user.partenaireId);
+}
+@UseGuards(JwtAuthGuard)
+  @Roles('PARTENAIRE', 'ADMIN')
+@ApiBearerAuth()
+@Get('partenaire/:partenaireId')
+@ApiOperation({ summary: 'Changer l\'agent d\'une agence' })
+findByPartenaire(@Param('partenaireId', ParseIntPipe) partenaireId: number) {
+  return this.agencyService.findAgencesWithAgentsByPartenaire(partenaireId);
 }
 
 }

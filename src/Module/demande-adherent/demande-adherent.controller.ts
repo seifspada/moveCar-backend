@@ -135,4 +135,11 @@ update(
 ) {
   return this.demandeService.update(id, updateDto);
 }
+
+@Delete(':id')
+@ApiOperation({ summary: 'Supprimer une demande' })
+remove(@Param('id', ParseIntPipe) id: number) {
+  return this.demandeService.remove(id);
+}
+
 }

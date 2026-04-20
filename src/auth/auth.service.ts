@@ -293,11 +293,12 @@ async validateUser(userId: number) {
       },
     });
 
-    try {
-      await this.emailService.sendPasswordResetCode(email, resetCode);
-    } catch (error) {
-      throw new BadRequestException('Erreur lors de l\'envoi de l\'email: ' + error.message);
-    }
+   try {
+  await this.emailService.sendPasswordResetCode(email, resetCode);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  throw new BadRequestException('Erreur lors de l\'envoi de l\'email: ' + message);
+}
 
     return { message: 'Code de vérification envoyé à votre email' };
   }

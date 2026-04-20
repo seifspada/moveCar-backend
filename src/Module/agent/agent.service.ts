@@ -286,9 +286,11 @@ async findPublicByUserId(userId: number) {
   const agent = await this.prisma.agent.findFirst({
     where: { userId },
     select: {
+      id: true,        // ✅ AJOUTER
       nom: true,
       prenom: true,
-      photo: true,          // 🔹 on lit la photo sur agent
+      photo: true,
+      agenceId: true,  // ✅ AJOUTER
       user: {
         select: {
           email: true,
@@ -302,10 +304,12 @@ async findPublicByUserId(userId: number) {
   }
 
   return {
+    id: agent.id,              // ✅ AJOUTER
     nom: agent.nom,
     prenom: agent.prenom,
     email: agent.user.email,
-    photo: agent.photo,     // 🔹 on renvoie agent.photo
+    photo: agent.photo ?? null,
+    agenceId: agent.agenceId,  // ✅ AJOUTER
   };
 }
 

@@ -312,7 +312,6 @@ export class DemandeAdherentService {
 
     // ── Singles sans OCR
     const singlesSansOcr: Array<[keyof DemandeAdherentFiles, TypeDocument]> = [
-      ['kbis',             TypeDocument.KBIS],
       ['rib',              TypeDocument.RIB],
       ['casierJudiciaire', TypeDocument.CASIER_JUDICIAIRE],
       ['carteGrisWgarage', TypeDocument.W_GARAGE],
@@ -342,6 +341,8 @@ export class DemandeAdherentService {
     > = [
       ['assuranceRcPro',         TypeDocument.RC_PRO,         'assuranceRcPro'],
       ['assuranceRcCirculation', TypeDocument.RC_CIRCULATION, 'assuranceRcCirculation'],
+      ['kbis',                   TypeDocument.KBIS,           'kbis'],  // ✅ AJOUTÉ
+
     ];
 
     for (const [key, docType, typeDocumentOcr] of singlesAvecOcr) {
@@ -516,7 +517,7 @@ async refuser(id: number, motif?: string) {
 }
 
 
-  async updateDocumentDates(
+async updateDocumentDates(
   demandeId: number,
   documentId: number,
   dto: UpdateDocumentDatesDto,
@@ -542,14 +543,15 @@ async refuser(id: number, motif?: string) {
     );
   }
 
-  // 3. Seuls RC_PRO et RC_CIRCULATION sont modifiables
+  // 3. Seuls RC_PRO, RC_CIRCULATION et KBIS sont modifiables
   const TYPES_AUTORISÉS: TypeDocument[] = [
     TypeDocument.RC_PRO,
     TypeDocument.RC_CIRCULATION,
+    TypeDocument.KBIS,          // ✅ AJOUTÉ
   ];
   if (!TYPES_AUTORISÉS.includes(document.typeDocument)) {
     throw new BadRequestException(
-      `Seuls les documents RC_PRO et RC_CIRCULATION peuvent être modifiés. ` +
+      `Seuls les documents RC_PRO, RC_CIRCULATION et KBIS peuvent être modifiés. ` +
       `Type reçu : ${document.typeDocument}`,
     );
   }
@@ -620,68 +622,77 @@ async refuser(id: number, motif?: string) {
 
   // ================== SUPPRESSION ==================
 
-  async remove(id: number) {
-    const demande = await this.prisma.demandeAdhesion.findUnique({
-      where: { id },
-      include: {
-        documents: {
-          include: { fichiers: true },
+async remove(id: number) {
+  // 1. Vérifier que la demande existe
+  const demande = await this.prisma.demandeAdhesion.findUnique({
+    where: { id },
+    include: {
+      documents: {
+        select: {
+          id: true,
+          fichiers: { select: { id: true, cheminFichier: true } },
         },
-        adherent: true,
       },
+    },
+  });
+
+  if (!demande) {
+    throw new NotFoundException(`Demande d'adhésion #${id} introuvable`);
+  }
+
+  return this.prisma.$transaction(async (tx) => {
+    // 2. Supprimer les fichiers physiques + fichiers_documents
+    for (const doc of demande.documents) {
+      for (const fichier of doc.fichiers) {
+        // Supprimer le fichier physique du disque
+        try {
+          const fullPath = path.join(process.cwd(), fichier.cheminFichier);
+          await fs.unlink(fullPath);
+        } catch {
+          // Fichier déjà supprimé ou introuvable → on continue
+        }
+      }
+
+      // Supprimer les enregistrements fichiers_documents
+      await tx.fichierDocument.deleteMany({
+        where: { documentId: doc.id },
+      });
+    }
+
+    // 3. Supprimer les documents
+    await tx.document.deleteMany({
+      where: { demandeAdhesionId: id },
     });
 
-    if (!demande) {
-      throw new NotFoundException(`Demande d'adhésion #${id} introuvable`);
+    // 4. Supprimer l'adherent lié (s'il existe)
+    const adherent = await tx.adherent.findFirst({
+      where: { demandeAdhesionId: id },
+      select: { id: true },
+    });
+
+    if (adherent) {
+      // Supprimer les reservations_mission liées à l'adherent
+      await tx.$executeRaw`
+        DELETE FROM reservations_mission WHERE "adherentId" = ${adherent.id}
+      `;
+
+      await tx.adherent.delete({ where: { id: adherent.id } });
     }
 
-    if (
-      demande.statut === StatutDemande.ACCEPTEE ||
-      demande.statut === StatutDemande.VALIDEE
-    ) {
-      throw new BadRequestException(
-        "Impossible de supprimer une demande acceptée/validée. Veuillez la refuser d'abord.",
-      );
-    }
-
-    if (demande.adherent && demande.adherent.length > 0) {
-      throw new BadRequestException(
-        'Impossible de supprimer une demande avec un adhérent associé',
-      );
-    }
-
-    const uploadDir = this.getUploadDir(id);
+    // 5. Supprimer le dossier physique upload
     try {
-      await fs.access(uploadDir);
+      const uploadDir = this.getUploadDir(id);
       await fs.rm(uploadDir, { recursive: true, force: true });
     } catch {
-      // ignore si dossier inexistant
+      // Dossier inexistant → on continue
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      if (demande.documents.length > 0) {
-        await tx.fichierDocument.deleteMany({
-          where: {
-            documentId: { in: demande.documents.map((d) => d.id) },
-          },
-        });
-        await tx.document.deleteMany({
-          where: { demandeAdhesionId: id },
-        });
-      }
-      await tx.demandeAdhesion.delete({ where: { id } });
+    // 6. Supprimer la demande elle-même
+    return tx.demandeAdhesion.delete({
+      where: { id },
     });
+  });
+}
 
-    return {
-      success: true,
-      message: `Demande d'adhésion #${id} supprimée avec succès`,
-      demande: {
-        id: demande.id,
-        nom: demande.nom,
-        prenom: demande.prenom,
-        email: demande.email,
-        documentsSupprimes: demande.documents.length,
-      },
-    };
-  }
+
 }

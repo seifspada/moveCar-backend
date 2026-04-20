@@ -10,6 +10,15 @@ type AdherentPublic {
   typePack: String!
 }
 
+type AdherentSimpleEntity {
+  id: ID!
+  nom: String!
+  prenom: String!
+  statut: String!
+  telephone: String
+  user: UserSimpleEntity
+}
+
 type AdminPublic {
   email: String!
   nom: String!
@@ -25,8 +34,19 @@ type AdresseEntity {
   villeNom: String!
 }
 
-type AgentPublic {
+type AgentMissionEntity {
   email: String!
+  id: Int!
+  nom: String
+  photo: String
+  prenom: String
+  telephone: String
+}
+
+type AgentPublic {
+  agenceId: Int
+  email: String!
+  id: Int!
   nom: String!
   photo: String
   prenom: String!
@@ -93,6 +113,7 @@ type MissionCardType {
   fraisPeage: Float!
   id: String!
   montantTotal: Float!
+  statut: String
   typeCarburant: String!
   typeVehicule: String!
   villeArrivee: String!
@@ -102,6 +123,7 @@ type MissionCardType {
 type MissionEntity {
   adresseArrivee: AdresseEntity!
   adresseDepart: AdresseEntity!
+  agent: AgentMissionEntity!
   calculs: CalculEntity
   commentaire: String
   dateCreation: DateTime!
@@ -110,7 +132,6 @@ type MissionEntity {
   documents: [DocumentEntity!]!
   id: ID!
   notifications: [NotificationEntity!]!
-  partenaire: PartenaireMissionEntity!
   statut: StatutMission!
   vehicule: VehiculeMissionEntity!
 }
@@ -124,17 +145,34 @@ type MissionsPaginatedResponse {
 }
 
 type Mutation {
-  """Annuler une réservation (adhérent)"""
-  cancelReservation(id: String!): ReservationMissionEntity!
+  """Accepter une demande d'annulation (agent)"""
+  acceptCancellationRequest(id: String!): ReservationMissionEntity!
 
-  """Confirmer une réservation (partenaire)"""
-  confirmReservation(id: String!): ReservationMissionEntity!
+  """Accepter une réservation EN_ATTENTE (agent — étape 1)"""
+  acceptReservation(id: String!): ReservationMissionEntity!
 
-  """Créer une nouvelle réservation de mission"""
+  """
+  Annuler une réservation EN_ATTENTE sans motif — agent non répondant (adhérent)
+  """
+  cancelPendingReservation(id: String!): ReservationMissionEntity!
+
+  """Annuler une réservation dans les 24h (adhérent)"""
+  cancelReservation(id: String!, motifAnnulation: String): ReservationMissionEntity!
+
+  """Confirmer une réservation acceptée par l'agent (adhérent — étape 2)"""
+  confirmReservationByAdherent(id: String!): ReservationMissionEntity!
+
+  """Créer une nouvelle réservation de mission (adhérent)"""
   createReservation(input: CreateReservationInput!): ReservationResponse!
 
-  """Refuser une réservation avec motif (partenaire)"""
+  """Refuser une demande d'annulation (agent)"""
+  refuseCancellationRequest(id: String!, motifRefus: String!): ReservationMissionEntity!
+
+  """Refuser une réservation avec motif (agent)"""
   refuseReservation(id: String!, motifRefus: String!): ReservationMissionEntity!
+
+  """Demander une annulation après 24h (adhérent)"""
+  requestCancellation(id: String!, motifAnnulation: String!): ReservationMissionEntity!
 }
 
 type NotificationEntity {
@@ -143,17 +181,6 @@ type NotificationEntity {
   nomContact: String
   telephoneContact: String
   typeNotification: String!
-}
-
-type PartenaireMissionEntity {
-  email: String!
-  entiteAgence: String
-  entiteGroupe: String!
-  id: Int!
-  logo: String
-  nom: String!
-  prenom: String!
-  telephone: String!
 }
 
 type PartenaireNavbar {
@@ -167,10 +194,12 @@ type Query {
   adminMe: AdminPublic!
   agentMe: AgentPublic!
 
-  """Récupérer toutes les réservations (admin/partenaire)"""
+  """Récupérer toutes les réservations (admin/agent)"""
   allReservations: [ReservationMissionEntity!]!
   getMissionById(id: String!): MissionEntity
-  getMissionsByAgence(agenceId: Int!): [MissionCardType!]!
+
+  """Toutes les missions sans filtre (admin/agent)"""
+  getMissionsForCardsByAgence: [MissionCardType!]!
   missionsForCards: [MissionCardType!]!
 
   """Récupérer toutes les réservations de l'adhérent connecté"""
@@ -179,16 +208,24 @@ type Query {
 
   """Récupérer une réservation par son ID"""
   reservationById(id: String!): ReservationMissionEntity!
+
+  """Récupérer toutes les réservations d'une mission (agent/admin)"""
+  reservationsByMission(missionId: String!): [ReservationMissionEntity!]!
   searchMissions(page: Int = 1, pageSize: Int = 20, search: String): MissionsPaginatedResponse!
   searchMissionsByPosition(filters: SearchByPositionInput!, page: Int, pageSize: Int): MissionsPaginatedResponse!
   searchMissionsByTrajet(filters: SearchByTrajetInput!, page: Int, pageSize: Int): MissionsPaginatedResponse!
 }
 
 type ReservationMissionEntity {
+  adherent: AdherentSimpleEntity
   adherentId: Int!
+  annulePar: String
   commentaireAdherent: String
-  commentairePartenaire: String
+  commentaireAgent: String
+  dateAcceptationAgent: DateTime
+  dateAnnulation: DateTime
   dateArrivee: DateTime!
+  dateConfirmationAdherent: DateTime
   dateCreation: DateTime!
   dateDepart: DateTime!
   dateModification: DateTime!
@@ -200,12 +237,14 @@ type ReservationMissionEntity {
   heureArrivee: String!
   heureDepart: String!
   id: ID!
-  mission: MissionEntity!
+  mission: MissionEntity
   missionId: String!
   montantTotal: Float!
+  motifAnnulation: String
   motifRefus: String
   numeroReservation: String!
   statut: StatutReservation!
+  statutPrecedent: StatutReservation
 }
 
 type ReservationResponse {
@@ -252,11 +291,12 @@ enum StatutMission {
 
 """Statut de la réservation"""
 enum StatutReservation {
+  ACCEPTED_BY_AGENT
+  ANNULATION_DEMANDEE
   ANNULEE
-  CONFIRMEE
+  CONFIRMED_BY_ADHERENT
   EN_ATTENTE
   REFUSEE
-  TERMINEE
 }
 
 enum TypeCarburant {
@@ -294,6 +334,12 @@ enum TypeVehicule {
   VU_20M3
   VU_25M3
   VU_30M3
+}
+
+type UserSimpleEntity {
+  email: String!
+  name: String!
+  photo: String
 }
 
 type VehiculeMissionEntity {

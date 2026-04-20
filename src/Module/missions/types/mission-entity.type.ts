@@ -1,42 +1,35 @@
 import { ObjectType, Field, ID, Float, Int, registerEnumType } from '@nestjs/graphql';
 import { TypeVehicule, TypeCarburant, BoiteVitesse, TypeLieu, StatutMission } from '@prisma/client';
 
-// ================== ENUMS ==================
-
 registerEnumType(StatutMission, { name: 'StatutMission' });
 registerEnumType(TypeVehicule, { name: 'TypeVehicule' });
 registerEnumType(TypeCarburant, { name: 'TypeCarburant' });
 registerEnumType(BoiteVitesse, { name: 'BoiteVitesse' });
 registerEnumType(TypeLieu, { name: 'TypeLieu' });
 
-// ================== ENTITÉS ==================
 
+// ✅ PartenaireMissionEntity → AgentMissionEntity
 @ObjectType()
-class PartenaireMissionEntity {
+class AgentMissionEntity {
   @Field(() => Int)
   id: number;
 
-  @Field()
-  nom: string;
-
-  @Field()
-  prenom: string;
-
-  @Field()
-  entiteGroupe: string;
+  @Field({ nullable: true })
+  nom?: string;
 
   @Field({ nullable: true })
-  entiteAgence?: string;
+  prenom?: string;
 
   @Field()
   email: string;
 
-  @Field()
-  telephone: string;
+  @Field({ nullable: true })
+  telephone?: string;
 
   @Field({ nullable: true })
-  logo?: string;
+  photo?: string;
 }
+
 
 @ObjectType()
 class VehiculeMissionEntity {
@@ -62,6 +55,7 @@ class VehiculeMissionEntity {
   boiteVitesse: BoiteVitesse;
 }
 
+
 @ObjectType()
 class AdresseEntity {
   @Field()
@@ -86,6 +80,7 @@ class AdresseEntity {
   nomLieu?: string;
 }
 
+
 @ObjectType()
 class DisponibiliteEntity {
   @Field()
@@ -101,6 +96,7 @@ class DisponibiliteEntity {
   dateDepartMax?: Date;
 }
 
+
 @ObjectType()
 class CalculEntity {
   @Field()
@@ -115,6 +111,7 @@ class CalculEntity {
   @Field(() => Float)
   montantTotal: number;
 }
+
 
 @ObjectType()
 class NotificationEntity {
@@ -134,7 +131,7 @@ class NotificationEntity {
   telephoneContact?: string;
 }
 
-// ✅ Entité fichier (remplace cheminFichier direct sur Document)
+
 @ObjectType()
 class FichierDocumentEntity {
   @Field(() => Int)
@@ -150,7 +147,7 @@ class FichierDocumentEntity {
   dateModification: Date;
 }
 
-// ✅ Document sans cheminFichier direct — utilise fichiers[]
+
 @ObjectType()
 class DocumentEntity {
   @Field(() => Int)
@@ -181,7 +178,6 @@ class DocumentEntity {
   dateModification: Date;
 }
 
-// ================== MISSION ENTITY PRINCIPALE ==================
 
 @ObjectType()
 export class MissionEntity {
@@ -200,8 +196,9 @@ export class MissionEntity {
   @Field()
   dateModification: Date;
 
-  @Field(() => PartenaireMissionEntity)
-  partenaire: PartenaireMissionEntity;
+  // ✅ partenaire → agent (nullable car partenaireId est optionnel)
+  @Field(() => AgentMissionEntity)
+  agent: AgentMissionEntity;
 
   @Field(() => VehiculeMissionEntity)
   vehicule: VehiculeMissionEntity;
