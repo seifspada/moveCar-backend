@@ -52,75 +52,124 @@ export class AuthService {
     };
   }
 
-  // ✅ Login - Avec support adherent
-// auth.service.ts
+  // ✅ Login - Support pour User et Admin
+  async login(loginDto: LoginDto) {
+    console.log('🔍 Tentative de login pour:', loginDto.email);
 
-async login(loginDto: LoginDto) {
-  console.log('🔍 Tentative de login pour:', loginDto.email);
-
-  const user = await this.prisma.user.findUnique({
-    where: { email: loginDto.email },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      password: true,
-      roleId: true,
-      photo: true,
-      role: {
-        select: { id: true, name: true },
-      },
-      adherent: {
-        select: {
-          id: true,
-          nom: true,
-          prenom: true,
-          numeroAdherent: true,
-          dateNaissance: true,
-          telephone: true,
-          adresse: true,
-          codePostal: true,
-          ville: true,
-          photoUrl: true,
+    // ✅ Étape 1: Chercher dans la table User (adherents, agents, partenaires)
+    const user = await this.prisma.user.findUnique({
+      where: { email: loginDto.email },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        password: true,
+        roleId: true,
+        photo: true,
+        role: {
+          select: { id: true, name: true },
         },
-      },
-      partenaire: {
-        select: {
-          id: true,
-          nom: true,
-          prenom: true,
-          entiteGroupe: true,
-          entiteAgence: true,
-          email: true,
-          telephone: true,
-          codePartenaire: true,
-          estActif: true,
+        adherent: {
+          select: {
+            id: true,
+            nom: true,
+            prenom: true,
+            numeroAdherent: true,
+            dateNaissance: true,
+            telephone: true,
+            adresse: true,
+            codePostal: true,
+            ville: true,
+            photoUrl: true,
+          },
         },
-      },
-      agent: {
-        select: {
-          id: true,
-          agenceId: true,
-          photo: true,
-          nom: true,
-          prenom: true,
-          isProfileCompleted: true,
-          agence: {
-            select: {
-              id: true,
-              nom: true,
-              partenaire: {
-                select: { id: true },
+        partenaire: {
+          select: {
+            id: true,
+            nom: true,
+            prenom: true,
+            entiteGroupe: true,
+            entiteAgence: true,
+            email: true,
+            telephone: true,
+            codePartenaire: true,
+            estActif: true,
+          },
+        },
+        agent: {
+          select: {
+            id: true,
+            agenceId: true,
+            photo: true,
+            nom: true,
+            prenom: true,
+            isProfileCompleted: true,
+            agence: {
+              select: {
+                id: true,
+                nom: true,
+                partenaire: {
+                  select: { id: true },
+                },
               },
             },
           },
         },
       },
-    },
-  });
+    });
 
-  // ✅ Guard 1 — user inexistant → tenter admins
-  if (!user) {
+    // ✅ Si User trouvé, valider son mot de passe
+    if (user) {
+      console.log('✅ Utilisateur trouvé:', user.email, '| Rôle:', user.role?.name);
+
+      // Guard: profil non complété
+      if (!user.password) {
+        console.log('⚠️ Profil non complété pour:', user.email);
+        throw new UnauthorizedException(
+          'Profil non complété — veuillez utiliser le lien reçu par email',
+        );
+      }
+
+      // Guard: agent dont le profil n'est pas complété
+      if (user.agent && !user.agent.isProfileCompleted) {
+        console.log('⚠️ Agent profil incomplet pour:', user.email);
+        throw new UnauthorizedException(
+          'Profil agent non complété — veuillez utiliser le lien reçu par email',
+        );
+      }
+
+      // Vérifier le mot de passe
+      const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
+
+      if (!isPasswordValid) {
+        console.log('❌ Mot de passe invalide pour:', user.email);
+        throw new UnauthorizedException('Email ou mot de passe incorrect');
+      }
+
+      console.log('✅ Login User réussi:', user.email);
+
+      const payload = {
+        sub: user.id,
+        email: user.email,
+        roleId: user.roleId,
+        role: user.role?.name ?? null,
+        adherentId: user.adherent?.id ?? null,
+        partenaireId:
+          user.partenaire?.id ?? user.agent?.agence?.partenaire?.id ?? null,
+        agentId: user.agent?.id ?? null,
+        agenceId: user.agent?.agenceId ?? null,
+      };
+
+      const accessToken = this.jwtService.sign(payload);
+      const { password, ...userWithoutPassword } = user;
+
+      return {
+        user: userWithoutPassword,
+        accessToken,
+      };
+    }
+
+    // ✅ Étape 2: Si User non trouvé, chercher dans la table Admin
     console.log('🔍 Non trouvé dans users, tentative dans admins...');
 
     const admin = await this.prisma.admin.findUnique({
@@ -133,6 +182,7 @@ async login(loginDto: LoginDto) {
       throw new UnauthorizedException('Email ou mot de passe incorrect');
     }
 
+    // Vérifier le mot de passe admin
     const isAdminPasswordValid = await bcrypt.compare(loginDto.password, admin.password);
     if (!isAdminPasswordValid) {
       console.log('❌ Mot de passe invalide pour admin:', admin.email);
@@ -142,69 +192,17 @@ async login(loginDto: LoginDto) {
     console.log('✅ Login admin réussi pour:', admin.email);
 
     const { password, ...adminWithoutPassword } = admin;
+    const adminPayload = {
+      sub: admin.id,
+      email: admin.email,
+      role: 'admin',
+    };
+
     return {
       user: { ...adminWithoutPassword, role: { id: null, name: 'admin' } },
-      accessToken: this.jwtService.sign({
-        sub: admin.id,
-        email: admin.email,
-        roleId: null,
-        role: 'admin',
-        adherentId: null,
-        partenaireId: null,
-        agentId: null,
-        agenceId: null,
-      }),
+      accessToken: this.jwtService.sign(adminPayload),
     };
   }
-
-  console.log('✅ Utilisateur trouvé:', user.email, '| Rôle:', user.role?.name);
-
-  // ✅ Guard 2 — profil non complété (password null ou vide)
-  if (!user.password) {
-    console.log('⚠️ Profil non complété pour:', user.email);
-    throw new UnauthorizedException(
-      'Profil non complété — veuillez utiliser le lien reçu par email',
-    );
-  }
-
-  // ✅ Guard 3 — agent dont le profil n'est pas encore complété
-  if (user.agent && !user.agent.isProfileCompleted) {
-    console.log('⚠️ Agent profil incomplet pour:', user.email);
-    throw new UnauthorizedException(
-      'Profil agent non complété — veuillez utiliser le lien reçu par email',
-    );
-  }
-
-  // ✅ Guard 4 — vérification password
-  const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
-
-  if (!isPasswordValid) {
-    console.log('❌ Mot de passe invalide pour:', user.email);
-    throw new UnauthorizedException('Email ou mot de passe incorrect');
-  }
-
-  console.log('✅ Login réussi pour:', user.email, '| Rôle:', user.role?.name);
-
-  const payload = {
-    sub: user.id,
-    email: user.email,
-    roleId: user.roleId,
-    role: user.role?.name ?? null,
-    adherentId: user.adherent?.id ?? null,
-    partenaireId:
-      user.partenaire?.id ?? user.agent?.agence?.partenaire?.id ?? null,
-    agentId: user.agent?.id ?? null,
-    agenceId: user.agent?.agenceId ?? null,
-  };
-
-  const accessToken = this.jwtService.sign(payload);
-  const { password, ...userWithoutPassword } = user;
-
-  return {
-    user: userWithoutPassword,
-    accessToken,
-  };
-}
 
 
 // ============================================
