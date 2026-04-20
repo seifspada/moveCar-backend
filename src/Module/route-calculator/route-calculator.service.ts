@@ -78,7 +78,7 @@ export class RouteCalculatorService {
     this.fraisBase = this.configService.get<number>('TOLL_BASE_FEE')     ?? FRAIS_BASE;
 
     if (!this.apiKey) {
-      throw new Error("OPENROUTESERVICE_API_KEY n'est pas définie dans .env");
+      this.logger.warn("⚠️  OPENROUTESERVICE_API_KEY n'est pas définie - les appels au service de route échoueront");
     }
   }
 
@@ -114,6 +114,13 @@ export class RouteCalculatorService {
     coordonneesArrivee : [number, number],
     typeVehicule?      : string,
   ): Promise<RouteResult> {
+    if (!this.apiKey) {
+      throw new HttpException(
+        'OPENROUTESERVICE_API_KEY non configurée. Contactez l\'administrateur.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+
     const departNorm  = this.normalizeCoords(coordonneesDepart);
     const arriveeNorm = this.normalizeCoords(coordonneesArrivee);
 
@@ -185,6 +192,10 @@ export class RouteCalculatorService {
   // ─── Géocodage via ORS ──────────────────────────────────────────────────────
 
   private async geocoderVille(nomVille: string): Promise<[number, number]> {
+    if (!this.apiKey) {
+      throw new Error('OPENROUTESERVICE_API_KEY non configurée');
+    }
+
     try {
       const url = `${this.baseUrl}/geocode/search?api_key=${this.apiKey}`;
 
