@@ -10,6 +10,7 @@ RUN npm install --legacy-peer-deps
 COPY prisma ./prisma
 COPY . .
 
+RUN npx prisma generate
 RUN npm run build
 
 ENV PORT=10000
