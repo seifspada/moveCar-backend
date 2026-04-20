@@ -17,15 +17,26 @@ async function main() {
   const hashedPassword = await bcrypt.hash('Admin123!', 10);
   console.log('✅ Password hashé avec bcrypt (rounds: 10)');
 
-  // 3. 🔧 OPTION: Créer uniquement l'Admin (sans User)
-  // ====================================================
-  // Raison: L'Admin table est self-contained en Prisma
-  // Le userId peut rester NULL ou être lié à un User optionnel
-  
+  // 3. Créer le User d'abord (userId est OBLIGATOIRE dans Admin)
+  const user = await prisma.user.upsert({
+    where: { email: 'admin@movecar.com' },
+    update: { password: hashedPassword },
+    create: {
+      name: 'Admin System',
+      email: 'admin@movecar.com',
+      password: hashedPassword,
+      roleId: role.id,
+    },
+  });
+
+  console.log('✅ User créé:', user.email, 'avec ID:', user.id);
+
+  // 4. Créer l'Admin lié au User
   const admin = await prisma.admin.upsert({
     where: { email: 'admin@movecar.com' },
     update: { password: hashedPassword },
     create: {
+      userId: user.id,
       nom: 'Admin System',
       email: 'admin@movecar.com',
       password: hashedPassword,
@@ -33,22 +44,6 @@ async function main() {
   });
 
   console.log('✅ Admin créé:', admin.email, 'avec ID:', admin.id);
-
-  // 4. (OPTIONNEL) Créer un User pour l'admin s'il faut des infos supplémentaires
-  // ============================================================================
-  // Si vous voulez un User linked à cet Admin plus tard:
-  // 
-  // const user = await prisma.user.upsert({
-  //   where: { email: 'admin@movecar.com' },
-  //   update: {},
-  //   create: {
-  //     name: 'Admin System',
-  //     email: 'admin@movecar.com',
-  //     password: hashedPassword, // 📌 IMPORTANT: même password hashé
-  //     roleId: role.id,
-  //   },
-  // });
-  // console.log('✅ User créé:', user.email);
 
   // 5. Test: Vérifier que le password peut être validé
   const testIsValid = await bcrypt.compare('Admin123!', hashedPassword);
