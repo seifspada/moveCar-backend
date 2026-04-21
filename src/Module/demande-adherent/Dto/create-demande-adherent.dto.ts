@@ -6,8 +6,8 @@ import {
   MaxLength,
   IsDateString,
   Length,
-  Transform,
 } from 'class-validator';
+import { Transform } from 'class-transformer'; // ✅ Import manquant ajouté
 import { ApiProperty } from '@nestjs/swagger';
 import { Match } from '../decorators/match.decorator';
 
@@ -58,12 +58,11 @@ export class CreateDemandeAdherentDto {
   @IsNotEmpty({ message: 'Le téléphone est obligatoire' })
   @Transform(({ value }) => {
     if (!value) return value;
-    // Nettoyer le numéro: enlever les espaces, tirets, points, parenthèses
-    return value.replace(/[\s\-\.\(\)]/g, '');
+    return value.replace(/[\s\-\.\(\)]/g, ''); // ✅ Nettoyage avant validation
   })
   @Matches(/^((\+33|0033)[1-9]\d{8}|0[1-9]\d{8})$/, {
     message:
-      'Numéro de téléphone invalide (format attendu : 0612345678, 06 12 34 56 78, +33612345678 ou +33 6 12 34 56 78)',
+      'Numéro de téléphone invalide (format attendu : 0612345678, +33612345678)',
   })
   telephone: string;
 
@@ -85,7 +84,6 @@ export class CreateDemandeAdherentDto {
   @MaxLength(50)
   numeroPermis: string;
 
-  // ✅ Renommé : dateDelivrance → dateDebutValiditePermis
   @ApiProperty({
     example: '2020-03-10',
     description: 'Date de début de validité du permis',

@@ -15,6 +15,7 @@ import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './filters/http-exception.filter';
 
 
+
 async function saveFiles(demandeId: number, files: Record<string, MultipartFile[]>) {
   const basePath = join(process.cwd(), 'uploads', 'demandes', String(demandeId));
 
@@ -35,6 +36,7 @@ async function saveFiles(demandeId: number, files: Record<string, MultipartFile[
 }
 
 
+
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
@@ -50,13 +52,14 @@ async function bootstrap() {
 
   logger.log("✅ Variables d'environnement chargées");
 
-  const app = await NestFactory.create<NestFastifyApplication>(
-    AppModule,
-    new FastifyAdapter({
-      maxRequestSize: 52428800, // 50MB
-      requestTimeout: 300000,    // 5 minutes pour uploads volumineux
-    }),
-  );
+  
+const app = await NestFactory.create<NestFastifyApplication>(
+  AppModule,
+  new FastifyAdapter({
+    bodyLimit: 52428800,      // ✅ 50MB — remplace maxRequestSize
+    connectionTimeout: 300000, // ✅ remplace requestTimeout
+  }),
+);
 
   // ✅ Fichiers statiques
   const uploadsPath = join(process.cwd(), 'uploads');
@@ -73,8 +76,8 @@ async function bootstrap() {
   // ✅ Multipart plugin
   await app.register(multipart as any, {
     attachFieldsToBody: 'keyValues',
-    limits: { 
-      fileSize: 50 * 1024 * 1024,   // 50MB par fichier
+    limits: {
+      fileSize: 50 * 1024 * 1024,
       fieldNameSize: 100,
       fieldSize: 1000000,
       fields: 30,
@@ -90,17 +93,38 @@ async function bootstrap() {
     },
   });
 
-  // ✅ CORS
+  // ✅ CORS — production inclut Vercel
   const isDevelopment = process.env.NODE_ENV === 'development';
 
+  const allowedOrigins = isDevelopment
+    ? ['*']
+    : [
+        'https://move-car-one.vercel.app',
+        // Couvre aussi les URLs de preview Vercel (branches, PRs)
+        /^https:\/\/move-car.*\.vercel\.app$/,
+        // Garde localhost pour tests locaux contre le backend déployé
+        'http://localhost:3001',
+        'http://127.0.0.1:3001',
+      ];
+
   app.enableCors({
-    origin: isDevelopment
-      ? '*'
-      : [
-          'http://localhost:3001',
-          'http://192.168.56.1:3001',
-          'http://127.0.0.1:3001',
-        ],
+    origin: (origin, callback) => {
+      // Autorise les requêtes sans origin (Postman, curl, mobile)
+      if (!origin) return callback(null, true);
+
+      if (isDevelopment) return callback(null, true);
+
+      const allowed = allowedOrigins.some((o) =>
+        typeof o === 'string' ? o === origin : o.test(origin),
+      );
+
+      if (allowed) {
+        callback(null, true);
+      } else {
+        logger.warn(`🚫 CORS bloqué pour origin: ${origin}`);
+        callback(new Error(`CORS non autorisé pour: ${origin}`), false);
+      }
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
     allowedHeaders: [
@@ -113,7 +137,7 @@ async function bootstrap() {
 
   logger.log(
     `✅ CORS activé (mode: ${
-      isDevelopment ? 'development - all origins' : 'production - restricted'
+      isDevelopment ? 'development - all origins' : 'production - origins restreints'
     })`,
   );
 
@@ -130,7 +154,7 @@ async function bootstrap() {
   // ✅ Exception filter global
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  // ✅ Swagger — tous les tags enregistrés
+  // ✅ Swagger
   const config = new DocumentBuilder()
     .setTitle('API TransConvoy')
     .setDescription('API de gestion des rôles, utilisateurs et authentification')
@@ -146,7 +170,6 @@ async function bootstrap() {
     )
     .addServer('http://localhost:3000', 'Serveur de développement')
     .addServer('http://localhost:3001', 'Frontend Next.js')
-    // ✅ Tous les tags déclarés explicitement
     .addTag('Auth', "Endpoints d'authentification")
     .addTag('Users', 'Gestion des utilisateurs')
     .addTag('Roles', 'Gestion des rôles')
@@ -154,8 +177,8 @@ async function bootstrap() {
     .addTag('Agents', 'Gestion des agents')
     .addTag('Adherents', 'Gestion des adhérents')
     .addTag('Partenaires', 'Gestion des partenaires')
-    .addTag('Demandes Partenaire', 'Demandes de partenariat')  // ✅ ajouté
-    .addTag('Demandes Adhérent', "Demandes d'adhésion")        // ✅ ajouté
+    .addTag('Demandes Partenaire', 'Demandes de partenariat')
+    .addTag('Demandes Adhérent', "Demandes d'adhésion")
     .addTag('Missions', 'Gestion des missions')
     .addTag('Reservations Mission', 'Réservations de missions')
     .addTag('Alertes', 'Alertes géographiques')
