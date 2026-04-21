@@ -9,7 +9,18 @@ import { Server, Socket } from 'socket.io';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { StatutDemande } from '@prisma/client';
 
-@WebSocketGateway({ cors: { origin: '*' } })
+@WebSocketGateway({
+  cors: {
+    origin: [
+      'https://move-car-one.vercel.app',
+      /^https:\/\/move-car.*\.vercel\.app$/,
+      'http://localhost:3001',
+      'http://localhost:3000',
+    ],
+    credentials: true,
+  },
+  transports: ['websocket', 'polling'],
+})
 export class DemandePartenaireGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
@@ -18,7 +29,6 @@ export class DemandePartenaireGateway
 
   constructor(private readonly prisma: PrismaService) {}
 
-  // ✅ À la connexion → envoyer UNIQUEMENT les demandes EN_ATTENTE
   async handleConnection(client: Socket) {
     console.log('✅ Client partenaire connecté:', client.id);
 
@@ -50,7 +60,6 @@ export class DemandePartenaireGateway
     console.log('❌ Client partenaire déconnecté:', client.id);
   }
 
-  // ✅ Nouvelle demande EN_ATTENTE → ajouter dans la liste
   notifyNewDemande(data: {
     email:    string;
     id:       number;
@@ -65,7 +74,6 @@ export class DemandePartenaireGateway
     });
   }
 
-  // ✅ Statut changé → EN_ATTENTE ajouté pour le cas du report
   notifyStatutChange(data: {
     id:     number;
     statut: 'EN_ATTENTE' | 'EN_COURS_TRAITEMENT' | 'ACCEPTEE' | 'REFUSEE';

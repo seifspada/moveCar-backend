@@ -9,7 +9,18 @@ import { Server, Socket } from 'socket.io';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { StatutDemande } from '@prisma/client';
 
-@WebSocketGateway({ cors: { origin: '*' } })
+@WebSocketGateway({
+  cors: {
+    origin: [
+      'https://move-car-one.vercel.app',
+      /^https:\/\/move-car.*\.vercel\.app$/,
+      'http://localhost:3001',
+      'http://localhost:3000',
+    ],
+    credentials: true,
+  },
+  transports: ['websocket', 'polling'],
+})
 export class DemandeAdherentGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
@@ -18,12 +29,11 @@ export class DemandeAdherentGateway
 
   constructor(private readonly prisma: PrismaService) {}
 
-  // ✅ À la connexion → envoyer UNIQUEMENT les demandes EN_ATTENTE
   async handleConnection(client: Socket) {
     console.log('✅ Client connecté:', client.id);
 
     const demandes = await this.prisma.demandeAdhesion.findMany({
-      where: { statut: StatutDemande.EN_ATTENTE }, // ✅ filtre EN_ATTENTE
+      where: { statut: StatutDemande.EN_ATTENTE },
       orderBy: { dateCreation: 'desc' },
       take: 50,
       select: {
@@ -50,11 +60,10 @@ export class DemandeAdherentGateway
     console.log('❌ Client déconnecté:', client.id);
   }
 
-  // ✅ Notifier tous les clients d'une nouvelle demande (EN_ATTENTE)
   notifyNewDemande(data: {
     email: string;
     id: number;
-    nom: string;       // ✅ ajouter nom/prenom pour afficher le message
+    nom: string;
     prenom: string;
     message?: string;
   }) {
@@ -65,7 +74,6 @@ export class DemandeAdherentGateway
     });
   }
 
-  // ✅ NOUVEAU — Notifier que la demande a changé de statut → retirer de la liste
   notifyStatutChange(data: {
     id: number;
     statut: 'ACCEPTEE' | 'REFUSEE';
