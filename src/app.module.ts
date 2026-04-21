@@ -24,12 +24,18 @@ import { AgentModule } from './Module/agent/agent.module';
 import { DemandePartenaireModule } from './Module/demande-partenaire/demande-partenaire.module';
 import { AdminModule } from './Module/admin/admin.module';
 import { DocumentProcessingModule } from './Module/document-processing/document-processing.module';
+import { ServeStaticModule } from '@nestjs/serve-static';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
+    }),
+
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
     }),
 
     GraphQLModule.forRoot<ApolloDriverConfig>({
@@ -39,12 +45,9 @@ import { DocumentProcessingModule } from './Module/document-processing/document-
       introspection: true,
       sortSchema: true,
       debug: true,
-
       buildSchemaOptions: {
         numberScalarMode: 'integer',
       },
-
-      // ✅ IMPORTANT: Passer req ET res
       context: ({ req, res }) => ({ req, res }),
     }),
 
