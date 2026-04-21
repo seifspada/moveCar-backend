@@ -52,7 +52,10 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    new FastifyAdapter({
+      maxRequestSize: 52428800, // 50MB
+      requestTimeout: 300000,    // 5 minutes pour uploads volumineux
+    }),
   );
 
   // ✅ Fichiers statiques
@@ -70,7 +73,13 @@ async function bootstrap() {
   // ✅ Multipart plugin
   await app.register(multipart as any, {
     attachFieldsToBody: 'keyValues',
-    limits: { fileSize: 10 * 1024 * 1024 },
+    limits: { 
+      fileSize: 50 * 1024 * 1024,   // 50MB par fichier
+      fieldNameSize: 100,
+      fieldSize: 1000000,
+      fields: 30,
+      files: 30,
+    },
     onFile: async (part: any) => {
       part.value = {
         filename: part.filename,

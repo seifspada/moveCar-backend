@@ -6,6 +6,7 @@ import {
   MaxLength,
   IsDateString,
   Length,
+  Transform,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Match } from '../decorators/match.decorator';
@@ -55,9 +56,14 @@ export class CreateDemandeAdherentDto {
 
   @ApiProperty({ example: '+33612345678' })
   @IsNotEmpty({ message: 'Le téléphone est obligatoire' })
+  @Transform(({ value }) => {
+    if (!value) return value;
+    // Nettoyer le numéro: enlever les espaces, tirets, points, parenthèses
+    return value.replace(/[\s\-\.\(\)]/g, '');
+  })
   @Matches(/^((\+33|0033)[1-9]\d{8}|0[1-9]\d{8})$/, {
     message:
-      'Numéro de téléphone invalide (format attendu : 0XXXXXXXXX ou +33XXXXXXXXX)',
+      'Numéro de téléphone invalide (format attendu : 0612345678, 06 12 34 56 78, +33612345678 ou +33 6 12 34 56 78)',
   })
   telephone: string;
 

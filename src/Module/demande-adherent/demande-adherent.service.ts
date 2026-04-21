@@ -401,16 +401,21 @@ export class DemandeAdherentService {
       },
     });
 
-  
-this.gateway.notifyNewDemande({
-  email: dto.email,
-  id: demande.id,
-  nom: dto.nom,       // ✅ ajouter
-  prenom: dto.prenom, // ✅ ajouter
-  message: 'Nouvelle demande reçue',
-});
+    // ── Notifier les admins en temps réel (sans bloquer si ça échoue)
+    try {
+      this.gateway.notifyNewDemande({
+        email: dto.email,
+        id: demande.id,
+        nom: dto.nom,
+        prenom: dto.prenom,
+        message: 'Nouvelle demande reçue',
+      });
+    } catch (error: any) {
+      console.error('Erreur notification gateway:', { email: dto.email, error: error.message });
+      // Continue even if WebSocket gateway fails
+    }
 
-    return this.cleanDemande(result); // ✅
+    return this.cleanDemande(result);
   }
 
   // ================== LECTURE / FILTRES ==================
