@@ -9,12 +9,9 @@ import { join } from 'path';
 import { existsSync } from 'fs';
 import { promises as fs } from 'fs';
 import multipart, { MultipartFile } from '@fastify/multipart';
-import fastifyStatic from '@fastify/static';
 
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './filters/http-exception.filter';
-
-
 
 async function saveFiles(demandeId: number, files: Record<string, MultipartFile[]>) {
   const basePath = join(process.cwd(), 'uploads', 'demandes', String(demandeId));
@@ -35,8 +32,6 @@ async function saveFiles(demandeId: number, files: Record<string, MultipartFile[
   }
 }
 
-
-
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
@@ -52,26 +47,13 @@ async function bootstrap() {
 
   logger.log("✅ Variables d'environnement chargées");
 
-  
-const app = await NestFactory.create<NestFastifyApplication>(
-  AppModule,
-  new FastifyAdapter({
-    bodyLimit: 52428800,      // ✅ 50MB — remplace maxRequestSize
-    connectionTimeout: 300000, // ✅ remplace requestTimeout
-  }),
-);
-
-  // ✅ Fichiers statiques
-  const uploadsPath = join(process.cwd(), 'uploads');
-  logger.log(`📁 Uploads path: ${uploadsPath}`);
-
-  await app.register(fastifyStatic as any, {
-    root: uploadsPath,
-    prefix: '/uploads/',
-    decorateReply: false,
-  });
-
-  logger.log('✅ Fichiers statiques configurés sur /uploads/');
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter({
+      bodyLimit: 52428800,
+      connectionTimeout: 300000,
+    }),
+  );
 
   // ✅ Multipart plugin
   await app.register(multipart as any, {
@@ -100,16 +82,13 @@ const app = await NestFactory.create<NestFastifyApplication>(
     ? ['*']
     : [
         'https://move-car-one.vercel.app',
-        // Couvre aussi les URLs de preview Vercel (branches, PRs)
         /^https:\/\/move-car.*\.vercel\.app$/,
-        // Garde localhost pour tests locaux contre le backend déployé
         'http://localhost:3001',
         'http://127.0.0.1:3001',
       ];
 
   app.enableCors({
     origin: (origin, callback) => {
-      // Autorise les requêtes sans origin (Postman, curl, mobile)
       if (!origin) return callback(null, true);
 
       if (isDevelopment) return callback(null, true);
@@ -200,7 +179,7 @@ const app = await NestFactory.create<NestFastifyApplication>(
   logger.log('========================================');
   logger.log(`🚀 Server running on http://localhost:${port}`);
   logger.log(`📚 Swagger disponible sur http://localhost:${port}/api`);
-  logger.log(`📁 Fichiers uploads: http://localhost:${port}/uploads/`);
+  logger.log(`📁 Fichiers uploads servis sur /uploads/ via ServeStaticModule`);
   logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.log('========================================');
 }
