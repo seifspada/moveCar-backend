@@ -5,9 +5,9 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { StatutEntreprise, TypeRendezvous } from '@prisma/client';
-import { Match } from 'src/Module/demande-adherent/decorators/match.decorator';
 import { IsDateNotPast } from '../decorator/is-date-not-past.decorator';
 import { IsValidTimeSlot } from '../decorator/is-valid-timeslot.decorator';
+import { Match } from '../decorator/match.decorator';
 
 export class CreateDemandePartenaireDto {
   // ========== Informations de contact ==========

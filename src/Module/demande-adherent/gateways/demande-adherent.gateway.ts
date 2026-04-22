@@ -6,8 +6,8 @@ import {
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { PrismaService } from 'src/prisma/prisma.service';
 import { StatutDemande } from '@prisma/client';
+import { PrismaService } from '../../../prisma/prisma.service';
 
 @WebSocketGateway({
   cors: {

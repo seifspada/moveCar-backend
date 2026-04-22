@@ -1,9 +1,9 @@
 // src/Module/alertes/alertes.service.ts
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { GeoService } from '../geo/geo.service';
 import { TypeAlerte } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class AlertesService {

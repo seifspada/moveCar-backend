@@ -2,7 +2,7 @@ import { Resolver, Query, Args, Int, Context } from '@nestjs/graphql';
 import { NotFoundException, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { AgentService } from './agent.service';
 import { AgentPublic } from './dto/agent-public.model';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 @Resolver(() => AgentPublic)
 export class AgentResolver {

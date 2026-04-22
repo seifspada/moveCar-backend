@@ -2,9 +2,9 @@
 import { Module } from '@nestjs/common';
 import { AlertesController } from './alertes.controller';
 import { AlertesService } from './alertes.service';
-import { PrismaModule } from 'src/prisma/prisma.module';
 import { EmailModule } from '../email/email.module';
 import { GeoModule } from '../geo/geo.module';
+import { PrismaModule } from '../../prisma/prisma.module';
 
 @Module({
   imports: [PrismaModule, EmailModule,GeoModule],

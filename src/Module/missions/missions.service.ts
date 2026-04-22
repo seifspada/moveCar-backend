@@ -1,7 +1,6 @@
 // missions.service.ts
 
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
 import { RouteCalculatorService } from '../route-calculator/route-calculator.service';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
@@ -14,6 +13,7 @@ import { Adresse, CalculMission, DisponibiliteMission, Mission, Prisma, StatutMi
 import { AlertesService } from '../alertes/alertes.service';
 import { SearchByPositionInput, SearchByTrajetInput } from './types/mission-search-filters.input';
 import { GeoService } from '../geo/geo.service';
+import { PrismaService } from '../../prisma/prisma.service';
 
 
 export type MissionWithRelations = Mission & {

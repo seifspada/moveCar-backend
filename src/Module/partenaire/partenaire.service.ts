@@ -4,7 +4,6 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import * as path from 'path';
 import * as fs from 'fs/promises';
@@ -12,6 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { DemandePartenaire, StatutDemande } from '@prisma/client';
 import { CreatePartenaireProfileDto } from './dto/create-partenaire-profile.dto';
 import { UpdatePartenaireDto } from './dto/update-partenaire.dto';
+import { PrismaService } from '../../prisma/prisma.service';
 
 interface FastifyFileKV {
   value: Buffer;

@@ -21,8 +21,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { FastifyRequest } from 'fastify';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import { AgencyService } from '../agency/agency.service';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 @ApiTags('Agents')
 @Controller('agents')

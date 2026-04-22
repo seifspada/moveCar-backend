@@ -1,9 +1,9 @@
 import { Resolver, Query, Context } from '@nestjs/graphql';
 import { UseGuards, UnauthorizedException } from '@nestjs/common';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { PartenaireService } from './partenaire.service';
 import { PartenaireNavbar } from './dto/partenaire-navbar.model';
 import { PartenaireMissionHeader } from './dto/partenaire-mission-header.model';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 @Resolver()
 export class PartenaireResolver {

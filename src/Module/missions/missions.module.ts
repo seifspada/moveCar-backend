@@ -4,11 +4,11 @@ import { HttpModule } from '@nestjs/axios';  // ✅ Importer
 import { MissionsController } from './missions.controller';
 import { MissionsService } from './missions.service';
 import { RouteCalculatorModule } from '../route-calculator/route-calculator.module';
-import { PrismaModule } from 'src/prisma/prisma.module';
 import { MissionsResolver } from './missions.resolver';
 import { AlertesModule } from '../alertes/alertes.module';
 import { GeoService } from '../geo/geo.service';
 import { GeoModule } from '../geo/geo.module';
+import { PrismaModule } from '../../prisma/prisma.module';
 @Module({
   imports: [
     PrismaModule,

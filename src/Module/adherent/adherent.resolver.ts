@@ -2,7 +2,7 @@ import { Resolver, Query, Context } from '@nestjs/graphql';
 import { UseGuards, UnauthorizedException } from '@nestjs/common';
 import { AdherentService } from './adherent.service';
 import { AdherentPublic } from './dto/adherent-public.model';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 @Resolver(() => AdherentPublic)
 export class AdherentResolver {

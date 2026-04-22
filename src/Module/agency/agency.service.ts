@@ -1,12 +1,12 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateAgencyDto } from './dto/create-agency.dto';
 import { UpdateAgencyDto } from './dto/update-agency.dto';
-import { PrismaService } from 'src/prisma/prisma.service';
 import * as crypto from 'crypto';
 import { AgenceType } from './types/agence.type';
 import { EmailService } from '../email/email.service';
 import { AgentService } from '../agent/agent.service';
 import { randomBytes } from 'crypto';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class AgencyService {

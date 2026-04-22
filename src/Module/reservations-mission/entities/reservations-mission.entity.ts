@@ -7,9 +7,9 @@ import {
   Float,
   Int,
 } from '@nestjs/graphql';
-import { StatutReservation } from '@prisma/client';
-import { MissionEntity } from 'src/Module/missions/types/mission-entity.type';
 import { AdherentSimpleEntity } from './adherent-simple.entity';
+import { MissionEntity } from '../../missions/types/mission-entity.type';
+import { StatutReservation } from '@prisma/client';
 
 registerEnumType(StatutReservation, {
   name: 'StatutReservation',

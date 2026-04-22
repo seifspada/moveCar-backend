@@ -23,8 +23,8 @@ import {
 } from './types/mission-search-filters.input';
 import { MissionEntity } from './types/mission-entity.type';
 import { PrismaService } from '../../prisma/prisma.service';
-import { GqlAuthGuard } from 'src/auth/guards/gql-auth.guard';
-import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
+import { GqlAuthGuard } from '../../auth/guards/gql-auth.guard';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 
 @Resolver(() => MissionCardType)
 export class MissionsResolver {

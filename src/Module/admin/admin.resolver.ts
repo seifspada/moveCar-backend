@@ -1,8 +1,8 @@
 import { Resolver, Query, Context } from '@nestjs/graphql';
 import { UseGuards, UnauthorizedException } from '@nestjs/common';
 import { AdminService } from './admin.service';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { AdminPublic } from './dto/admin-public.model';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 
 @Resolver(() => AdminPublic)
 export class AdminResolver {

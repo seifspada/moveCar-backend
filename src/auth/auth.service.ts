@@ -4,8 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import * as bcrypt from 'bcrypt';
-import { EmailService } from 'src/Module/email/email.service';
 import * as crypto from 'crypto';
+import { EmailService } from '../Module/email/email.service';
 
 @Injectable()
 export class AuthService {

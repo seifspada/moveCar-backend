@@ -18,7 +18,6 @@ import { PartenaireService } from './partenaire.service';
 import { CreatePartenaireProfileDto } from './dto/create-partenaire-profile.dto';
 import { UpdatePartenaireDto } from './dto/update-partenaire.dto';
 import { FastifyRequest } from 'fastify';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
 @Controller('partenaire')
 export class PartenaireController {

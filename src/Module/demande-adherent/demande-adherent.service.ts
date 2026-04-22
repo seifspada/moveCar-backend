@@ -4,7 +4,6 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
 import { StatutDemande, StatutDocument, TypeDocument } from '@prisma/client';
 import { promises as fs } from 'fs';
 import * as path from 'path';
@@ -19,6 +18,7 @@ import { UpdateDemandeAdherentDto } from './Dto/update-demande-adherent.dto';
 import { DemandeAdherentGateway } from './gateways/demande-adherent.gateway';
 import { DocumentProcessingService } from '../document-processing/document-processing.service';
 import { UpdateDocumentDatesDto } from './Dto/update-document-dates.dto';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class DemandeAdherentService {

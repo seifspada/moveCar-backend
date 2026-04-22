@@ -4,7 +4,6 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
 import { UpdateAgentDto } from './dto/update-agent.dto';
 import { AgentType } from './types/agent.type';
 import * as bcrypt from 'bcrypt';
@@ -13,6 +12,7 @@ import * as fs from 'fs/promises';
 import { v4 as uuidv4 } from 'uuid';
 import { EmailService } from '../email/email.service';
 import { randomBytes } from 'crypto';
+import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
 export class AgentService {

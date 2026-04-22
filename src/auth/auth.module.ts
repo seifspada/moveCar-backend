@@ -8,8 +8,8 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UserModule } from '../user/user.module';
-import { EmailModule } from 'src/Module/email/email.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { EmailModule } from '../Module/email/email.module';
 
 @Module({
   imports: [

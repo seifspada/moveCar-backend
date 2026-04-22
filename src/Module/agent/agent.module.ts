@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { AgentService } from './agent.service';
 import { AgentController } from './agent.controller';
-import { PrismaModule } from 'src/prisma/prisma.module';
 import { EmailModule } from '../email/email.module';
 import { AgentResolver } from './agent.resolver';
+import { PrismaModule } from '../../prisma/prisma.module';
 
 @Module({
   imports: [PrismaModule, EmailModule],

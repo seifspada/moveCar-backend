@@ -1,5 +1,4 @@
 import { Injectable, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
 import { UpdateAdherentDto } from './dto/update-adherent.dto';
 import * as bcrypt from 'bcrypt';
 import * as path from 'path';
@@ -8,6 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { DemandeAdhesion, StatutDemande, TypePack } from '@prisma/client';
 import { EmailService } from '../email/email.service';
 import { CreateAdherentProfileDto } from './dto/create-profile-adherent.dto';
+import { PrismaService } from '../../prisma/prisma.service';
 
 interface FastifyFileKV {
   value: Buffer;

@@ -8,8 +8,6 @@ import { ReservationMissionEntity } from './entities/reservations-mission.entity
 import { ReservationsMissionService } from './reservations-mission.service';
 import { CreateReservationInput } from './dto/create-reservations-mission.input';
 import { ReservationResponse } from './types/reservation-response.type';
-import { ReservationMission } from '@prisma/client';
-import { Roles } from 'src/auth/decorators/roles.decorator';
 
 @Resolver(() => ReservationMissionEntity)
 export class ReservationsMissionResolver {

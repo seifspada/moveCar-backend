@@ -9,11 +9,12 @@ import { CreateAgencyDto } from './dto/create-agency.dto';
 import { UpdateAgencyDto } from './dto/update-agency.dto';
 import { AgenceType } from './types/agence.type';
 import { FastifyRequest } from 'fastify';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { Roles } from 'src/auth/decorators/roles.decorator';
+
 import { AgentService } from '../agent/agent.service';
 import { ChangeAgentDto } from './dto/change-agent.dto';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
 @ApiTags('Agencies')
 @UseGuards(JwtAuthGuard, RolesGuard)

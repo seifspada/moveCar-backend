@@ -16,10 +16,11 @@ import { MissionsService } from './missions.service';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { UpdateMissionStatusDto } from './dto/update-mission-status.dto';
 import { ListMissionsQueryDto } from './dto/list-missions-query.dto';
-import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
-import { Roles } from 'src/auth/decorators/roles.decorator';
+
 import { FastifyRequest } from 'fastify';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
 @Controller('missions')
 export class MissionsController {

@@ -1,9 +1,7 @@
 {
   "compilerOptions": {
-    // ✅ FIX: module et moduleResolution doivent être identiques
-    // Avec Node 22, "nodenext" est le choix optimal (couvre node16 + ESM natif)
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
+    "module": "commonjs",
+    "moduleResolution": "node",
 
     "rootDir": "./src",
     "declaration": true,
@@ -12,7 +10,7 @@
     "experimentalDecorators": true,
     "strictPropertyInitialization": false,
     "allowSyntheticDefaultImports": true,
-    "target": "ES2022",
+    "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
     "incremental": true,
