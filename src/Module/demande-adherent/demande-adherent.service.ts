@@ -509,12 +509,10 @@ export class DemandeAdherentService {
     return this.cleanDemande(result);
   }
 
-  async accepter(id: number) {
-  // 1. Générer le token de profil
+async accepter(id: number) {
   const profileToken = randomBytes(32).toString('hex');
-  const profileTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 jours
+  const profileTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-  // 2. Mettre à jour la demande avec le token + statut ACCEPTEE
   const demande = await this.prisma.demandeAdhesion.update({
     where: { id },
     data: {
@@ -524,24 +522,27 @@ export class DemandeAdherentService {
     },
   });
 
-  // 3. Construire l'URL de création de profil
-  const profileUrl = `${process.env.FRONTEND_URL}/formulaire/adherent/inscription-formulaire/${profileToken}`;
+  // ✅ Guard — échoue tôt si FRONTEND_URL manque
+  const frontendUrl = process.env.FRONTEND_URL;
+  if (!frontendUrl) {
+    console.error('❌ FRONTEND_URL non définie — email non envoyé');
+  } else {
+    const profileUrl = `${frontendUrl}/formulaire/adherent/inscription-formulaire/${profileToken}`;
 
-  // 4. Envoyer l'email avec le lien
-  try {
-    await this.emailService.sendProfileCreationLink(
-      demande.email,
-      demande.nom,
-      profileUrl,
-    );
-  } catch (error: any) {
-    console.error('❌ Erreur envoi email création profil adhérent:', {
-      email: demande.email,
-      error: error.message,
-    });
+    try {
+      await this.emailService.sendProfileCreationLink(
+        demande.email,
+        demande.nom,
+        profileUrl,
+      );
+    } catch (error: any) {
+      console.error('❌ Erreur envoi email création profil adhérent:', {
+        email: demande.email,
+        error: error.message,
+      });
+    }
   }
 
-  // 5. Notifier WebSocket
   this.gateway.notifyStatutChange({ id, statut: 'ACCEPTEE' });
 
   return demande;
