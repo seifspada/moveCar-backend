@@ -510,13 +510,42 @@ export class DemandeAdherentService {
   }
 
   async accepter(id: number) {
-    const demande = await this.prisma.demandeAdhesion.update({
-      where: { id },
-      data: { statut: StatutDemande.ACCEPTEE },
+  // 1. Générer le token de profil
+  const profileToken = randomBytes(32).toString('hex');
+  const profileTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 jours
+
+  // 2. Mettre à jour la demande avec le token + statut ACCEPTEE
+  const demande = await this.prisma.demandeAdhesion.update({
+    where: { id },
+    data: {
+      statut: StatutDemande.ACCEPTEE,
+      profileToken,
+      profileTokenExpiry,
+    },
+  });
+
+  // 3. Construire l'URL de création de profil
+  const profileUrl = `${process.env.FRONTEND_URL}/formulaire/adherent/inscription-formulaire/${profileToken}`;
+
+  // 4. Envoyer l'email avec le lien
+  try {
+    await this.emailService.sendProfileCreationLink(
+      demande.email,
+      demande.nom,
+      profileUrl,
+    );
+  } catch (error: any) {
+    console.error('❌ Erreur envoi email création profil adhérent:', {
+      email: demande.email,
+      error: error.message,
     });
-    this.gateway.notifyStatutChange({ id, statut: 'ACCEPTEE' });
-    return demande;
   }
+
+  // 5. Notifier WebSocket
+  this.gateway.notifyStatutChange({ id, statut: 'ACCEPTEE' });
+
+  return demande;
+}
 
   async refuser(id: number, motif?: string) {
     const demande = await this.prisma.demandeAdhesion.update({
