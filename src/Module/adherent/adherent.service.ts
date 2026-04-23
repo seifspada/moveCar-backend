@@ -1,8 +1,13 @@
-import { Injectable, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { UpdateAdherentDto } from './dto/update-adherent.dto';
 import * as bcrypt from 'bcrypt';
 import * as path from 'path';
-import * as fs from 'fs/promises';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { DemandeAdhesion, StatutDemande, TypePack } from '@prisma/client';
 import { EmailService } from '../email/email.service';
@@ -17,12 +22,20 @@ interface FastifyFileKV {
 
 @Injectable()
 export class AdherentService {
-  constructor(private readonly prisma: PrismaService,
-        private readonly emailService: EmailService, // ✅ Ajouter cette ligne
-
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
   ) {}
 
-  // Types MIME autorisés pour la photo
+  // ================== SUPABASE ==================
+
+  private supabase: SupabaseClient = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!,
+  );
+
+  private static readonly BUCKET = 'documents';
+
   private static readonly ALLOWED_PHOTO_MIME = new Set([
     'image/jpeg',
     'image/jpg',
@@ -30,7 +43,8 @@ export class AdherentService {
     'image/webp',
   ]);
 
-  // ✅ Valider le type de fichier photo
+  // ================== HELPERS FICHIERS ==================
+
   private assertValidPhoto(file: FastifyFileKV) {
     if (!file?.mimetype) {
       throw new BadRequestException('Photo invalide (mimetype manquant)');
@@ -40,40 +54,60 @@ export class AdherentService {
         `Type de photo non autorisé (${file.mimetype}). Autorisés: JPG/PNG/WEBP`,
       );
     }
-    // Limiter la taille (5MB max)
     if (file.value.length > 5 * 1024 * 1024) {
       throw new BadRequestException('La photo ne doit pas dépasser 5MB');
     }
   }
 
-  // ✅ Sauvegarder la photo dans le dossier profile
+  /**
+   * Upload la photo d'un adhérent vers Supabase Storage.
+   * Retourne l'URL publique à stocker dans photoUrl / user.photo.
+   */
   private async savePhoto(demandeId: number, file: FastifyFileKV): Promise<string> {
     this.assertValidPhoto(file);
 
-    // Créer le dossier profile dans le dossier de la demande
-    const profileDir = path.join(
-      process.cwd(),
-      'uploads',
-      'demandes',
-      String(demandeId),
-      'profile',
-    );
-
-    await fs.mkdir(profileDir, { recursive: true });
-
-    // Générer nom de fichier unique
     const ext = path.extname(file.filename);
     const fileName = `photo_${uuidv4()}${ext}`;
-    const filePath = path.join(profileDir, fileName);
+    const storagePath = `adherents/${demandeId}/profile/${fileName}`;
 
-    // Sauvegarder le fichier
-    await fs.writeFile(filePath, file.value);
+    const { error } = await this.supabase.storage
+      .from(AdherentService.BUCKET)
+      .upload(storagePath, file.value, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
 
-    // Retourner le chemin relatif
-    return `/uploads/demandes/${demandeId}/profile/${fileName}`;
+    if (error) {
+      throw new Error(`Upload photo adhérent échoué: ${error.message}`);
+    }
+
+    const { data } = this.supabase.storage
+      .from(AdherentService.BUCKET)
+      .getPublicUrl(storagePath);
+
+    return data.publicUrl;
   }
 
-  // ✅ Créer un adhérent par email (ancienne méthode)
+  /**
+   * Supprime une photo depuis Supabase Storage via son URL publique.
+   */
+  private async deletePhoto(publicUrl: string): Promise<void> {
+    const marker = `/object/public/${AdherentService.BUCKET}/`;
+    const idx = publicUrl.indexOf(marker);
+    if (idx === -1) return;
+    const storagePath = publicUrl.slice(idx + marker.length);
+
+    const { error } = await this.supabase.storage
+      .from(AdherentService.BUCKET)
+      .remove([storagePath]);
+
+    if (error) {
+      console.error('Supabase delete photo adhérent error:', error.message);
+    }
+  }
+
+  // ================== CRÉATION ==================
+
   private async createProfilFromDemandeCore(
     demande: DemandeAdhesion,
     motDePasse: string,
@@ -104,11 +138,11 @@ export class AdherentService {
     });
     if (!adherentRole) {
       throw new BadRequestException(
-        'Rôle ADHERENT non trouvé. Contactez l\'administrateur.',
+        "Rôle ADHERENT non trouvé. Contactez l'administrateur.",
       );
     }
 
-    // 4) Photo
+    // 4) Photo — upload Supabase
     if (!photoFile) {
       throw new BadRequestException('La photo est obligatoire');
     }
@@ -135,7 +169,7 @@ export class AdherentService {
           email: demande.email,
           password: hashedPassword,
           roleId: adherentRole.id,
-          photo: photoUrl,
+          photo: photoUrl, // ✅ URL publique Supabase
         },
       });
 
@@ -150,7 +184,7 @@ export class AdherentService {
           raisonSociale: demande.raisonSociale,
           numeroKbis: demande.numeroKbis,
           typePack,
-          photoUrl,
+          photoUrl, // ✅ URL publique Supabase
           dateExpiration,
           montantCotisation,
         },
@@ -172,73 +206,69 @@ export class AdherentService {
     return { result, photoUrl };
   }
 
-  // ✅ Méthode publique appelée par le contrôleur (style partenaire)
-async createProfilAdherentFromToken(
-  profileToken: string,
-  code: string | undefined,
-  dto: CreateAdherentProfileDto,
-  photoFile: FastifyFileKV,
-) {
-  console.log('🔍 Recherche demande avec token:', profileToken);
+  async createProfilAdherentFromToken(
+    profileToken: string,
+    code: string | undefined,
+    dto: CreateAdherentProfileDto,
+    photoFile: FastifyFileKV,
+  ) {
+    console.log('🔍 Recherche demande avec token:', profileToken);
 
-  // 1) Chercher la demande
-  const demande = await this.prisma.demandeAdhesion.findUnique({
-    where: { profileToken },
-    include: { adherent: true },
-  });
-
-  console.log('📋 Demande trouvée:', demande ? {
-    id: demande.id,
-    email: demande.email,
-    statut: demande.statut,
-    profileTokenExpiry: demande.profileTokenExpiry,
-    adherentExiste: !!demande.adherent,
-  } : 'AUCUNE');
-
-  if (!demande) {
-    console.error('❌ Token invalide - aucune demande trouvée');
-    throw new NotFoundException('Demande introuvable, expirée ou déjà utilisée');
-  }
-
-  // 2) Vérifier expiration
-  if (demande.profileTokenExpiry && demande.profileTokenExpiry < new Date()) {
-    console.error('❌ Token expiré:', {
-      expiry: demande.profileTokenExpiry,
-      now: new Date(),
+    const demande = await this.prisma.demandeAdhesion.findUnique({
+      where: { profileToken },
+      include: { adherent: true },
     });
-    throw new BadRequestException('Token expiré');
+
+    console.log('📋 Demande trouvée:', demande
+      ? {
+          id: demande.id,
+          email: demande.email,
+          statut: demande.statut,
+          profileTokenExpiry: demande.profileTokenExpiry,
+          adherentExiste: !!demande.adherent,
+        }
+      : 'AUCUNE',
+    );
+
+    if (!demande) {
+      console.error('❌ Token invalide - aucune demande trouvée');
+      throw new NotFoundException('Demande introuvable, expirée ou déjà utilisée');
+    }
+
+    if (demande.profileTokenExpiry && demande.profileTokenExpiry < new Date()) {
+      console.error('❌ Token expiré:', {
+        expiry: demande.profileTokenExpiry,
+        now: new Date(),
+      });
+      throw new BadRequestException('Token expiré');
+    }
+
+    if (demande.statut !== StatutDemande.ACCEPTEE) {
+      console.error('❌ Statut invalide:', demande.statut);
+      throw new BadRequestException(`Demande non acceptée (statut: ${demande.statut})`);
+    }
+
+    if (demande.adherent && demande.adherent.length > 0) {
+      console.error('❌ Adhérent déjà créé');
+      throw new ConflictException('Un profil a déjà été créé pour cette demande');
+    }
+
+    console.log('✅ Validations OK, création du profil...');
+
+    return this.createProfilFromDemandeCore(
+      demande,
+      dto.motDePasse,
+      dto.typePack,
+      photoFile,
+    );
   }
 
-  // 3) Vérifier statut
-  if (demande.statut !== StatutDemande.ACCEPTEE) {
-    console.error('❌ Statut invalide:', demande.statut);
-    throw new BadRequestException(`Demande non acceptée (statut: ${demande.statut})`);
-  }
+  // ================== MISE À JOUR ==================
 
-  // 4) Vérifier adhérent existant
-  if (demande.adherent && demande.adherent.length > 0) {
-    console.error('❌ Adhérent déjà créé');
-    throw new ConflictException('Un profil a déjà été créé pour cette demande');
-  }
-
-  console.log('✅ Validations OK, création du profil...');
-
-  // Suite de la logique...
-  return this.createProfilFromDemandeCore(
-    demande,
-    dto.motDePasse,
-    dto.typePack,
-    photoFile,
-  );
-}
-
-
-  // ✅ Mettre à jour un adhérent
   async update(id: number, dto: UpdateAdherentDto, photoFile?: FastifyFileKV) {
-    // Vérifier que l'adhérent existe
     const adherent = await this.prisma.adherent.findUnique({
       where: { id },
-      include: { 
+      include: {
         demandeAdhesion: true,
         user: true,
       },
@@ -250,22 +280,22 @@ async createProfilAdherentFromToken(
 
     const dataToUpdate: any = {};
 
-    // Mettre à jour les champs de l'adherent
-    if (dto.nom) dataToUpdate.nom = dto.nom;
-    if (dto.prenom) dataToUpdate.prenom = dto.prenom;
+    if (dto.nom)       dataToUpdate.nom = dto.nom;
+    if (dto.prenom)    dataToUpdate.prenom = dto.prenom;
     if (dto.telephone) dataToUpdate.telephone = dto.telephone;
-    if (dto.ville) dataToUpdate.ville = dto.ville;
-    if (dto.typePack) dataToUpdate.typePack = dto.typePack;
+    if (dto.ville)     dataToUpdate.ville = dto.ville;
+    if (dto.typePack)  dataToUpdate.typePack = dto.typePack;
 
-    // Sauvegarder nouvelle photo si fournie
+    // ── Nouvelle photo : supprimer l'ancienne, uploader la nouvelle
     if (photoFile) {
+      if (adherent.photoUrl) {
+        await this.deletePhoto(adherent.photoUrl);
+      }
       const photoUrl = await this.savePhoto(adherent.demandeAdhesionId, photoFile);
       dataToUpdate.photoUrl = photoUrl;
     }
 
-    // Transaction pour mettre à jour User + Adherent
     return this.prisma.$transaction(async (tx) => {
-      // Mettre à jour le User si mot de passe fourni
       if (dto.motDePasse) {
         const hashedPassword = await bcrypt.hash(dto.motDePasse, 10);
         await tx.user.update({
@@ -274,7 +304,6 @@ async createProfilAdherentFromToken(
         });
       }
 
-      // Mettre à jour l'Adherent
       return tx.adherent.update({
         where: { id },
         data: dataToUpdate,
@@ -292,7 +321,8 @@ async createProfilAdherentFromToken(
     });
   }
 
-  // ✅ Lister tous les adhérents
+  // ================== LECTURE ==================
+
   async findAll() {
     return this.prisma.adherent.findMany({
       include: {
@@ -315,7 +345,6 @@ async createProfilAdherentFromToken(
     });
   }
 
-  // ✅ Trouver un adhérent par ID
   async findOne(id: number) {
     const adherent = await this.prisma.adherent.findUnique({
       where: { id },
@@ -339,11 +368,16 @@ async createProfilAdherentFromToken(
     return adherent;
   }
 
-  // ✅ Supprimer un adhérent
+  // ================== SUPPRESSION ==================
+
   async remove(id: number) {
     const adherent = await this.findOne(id);
 
-    // Supprimer en cascade (User sera supprimé automatiquement grâce à onDelete: Cascade)
+    // ── Supprimer la photo Supabase si elle existe (non-bloquant)
+    if (adherent.photoUrl) {
+      await this.deletePhoto(adherent.photoUrl);
+    }
+
     return this.prisma.adherent.delete({
       where: { id },
       include: {
@@ -358,39 +392,38 @@ async createProfilAdherentFromToken(
     });
   }
 
-// backend/src/adherent/adherent.service.ts
+  // ================== PROFIL PUBLIC ==================
 
-async findPublicByUserId(userId: number) {
-  console.log('🔍 Recherche adhérent pour userId:', userId);
-  
-  const adherent = await this.prisma.adherent.findFirst({
-    where: { userId },
-    select: {
-      nom: true,
-      prenom: true,
-      typePack: true,
-      user: { 
-        select: { 
-          email: true, 
-          photo: true 
-        } 
+  async findPublicByUserId(userId: number) {
+    console.log('🔍 Recherche adhérent pour userId:', userId);
+
+    const adherent = await this.prisma.adherent.findFirst({
+      where: { userId },
+      select: {
+        nom: true,
+        prenom: true,
+        typePack: true,
+        user: {
+          select: {
+            email: true,
+            photo: true,
+          },
+        },
       },
-    },
-  });
+    });
 
-  if (!adherent) {
-    throw new NotFoundException('Adhérent introuvable');
+    if (!adherent) {
+      throw new NotFoundException('Adhérent introuvable');
+    }
+
+    console.log('✅ Adhérent trouvé:', adherent.nom, adherent.prenom);
+
+    return {
+      nom: adherent.nom,
+      prenom: adherent.prenom,
+      email: adherent.user.email,
+      photo: adherent.user.photo, // ✅ URL publique Supabase
+      typePack: adherent.typePack,
+    };
   }
-
-  console.log('✅ Adhérent trouvé:', adherent.nom, adherent.prenom);
-
-  return {
-    nom: adherent.nom,
-    prenom: adherent.prenom,
-    email: adherent.user.email,
-    photo: adherent.user.photo,
-    typePack: adherent.typePack,
-  };
-}
-
 }

@@ -19,7 +19,7 @@ import { EmailService } from '../email/email.service';
 import { AccepterDemandeDto } from './dto/accepter-demande.dto';
 import * as crypto from 'crypto';
 import * as path from 'path';
-import * as fs from 'fs/promises';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { FastifyFileKV } from '../demande-adherent/Types/types';
 import { DemandePartenaireGateway } from './gateways/demande-partenaire.gateway';
@@ -31,6 +31,68 @@ export class DemandePartenaireService {
     private readonly emailService: EmailService,
     private readonly gateway: DemandePartenaireGateway,
   ) {}
+
+  // ================== SUPABASE ==================
+
+  private supabase: SupabaseClient = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!,
+  );
+
+  private static readonly BUCKET = 'documents';
+
+  /**
+   * Upload le contrat PDF vers Supabase Storage.
+   * Retourne l'URL publique + métadonnées à stocker en base.
+   */
+  private async saveContratFile(
+    demandeId: number,
+    file: FastifyFileKV,
+  ): Promise<{ cheminDocument: string; nomFichier: string; tailleDocument: number }> {
+    if (!file?.mimetype) {
+      throw new BadRequestException('Contrat: fichier invalide (mimetype manquant)');
+    }
+    if (file.mimetype !== 'application/pdf') {
+      throw new BadRequestException(
+        `Contrat: type non autorisé (${file.mimetype}). Seul PDF est accepté.`,
+      );
+    }
+
+    const uniqueName = `contrat_${uuidv4()}${path.extname(file.filename)}`;
+    const storagePath = `contrats/${demandeId}/${uniqueName}`;
+
+    const { error } = await this.supabase.storage
+      .from(DemandePartenaireService.BUCKET)
+      .upload(storagePath, file.value, {
+        contentType: 'application/pdf',
+        upsert: true,
+      });
+
+    if (error) {
+      throw new Error(`Upload contrat Supabase échoué: ${error.message}`);
+    }
+
+    const { data } = this.supabase.storage
+      .from(DemandePartenaireService.BUCKET)
+      .getPublicUrl(storagePath);
+
+    return {
+      cheminDocument: data.publicUrl,
+      nomFichier: file.filename,
+      tailleDocument: file.value.length,
+    };
+  }
+
+  /**
+   * Extrait le storagePath depuis une URL publique Supabase.
+   * URL format : https://<project>.supabase.co/storage/v1/object/public/<bucket>/<storagePath>
+   */
+  private extractStoragePath(publicUrl: string): string | null {
+    const marker = `/object/public/${DemandePartenaireService.BUCKET}/`;
+    const idx = publicUrl.indexOf(marker);
+    if (idx === -1) return null;
+    return publicUrl.slice(idx + marker.length);
+  }
 
   // ================== CRÉATION ==================
 
@@ -161,7 +223,6 @@ export class DemandePartenaireService {
       console.error('❌ Erreur envoi notification équipe:', error.message);
     }
 
-    // ✅ Notifier WebSocket
     this.gateway.notifyNewDemande({
       email: demande.email,
       id: demande.id,
@@ -236,59 +297,54 @@ export class DemandePartenaireService {
   // ================== CONFIRMER RDV ==================
 
   async confirmerRendezvous(id: number, profileUrl: string) {
-  const demande = await this.prisma.demandePartenaire.findUnique({
-    where: { id },
-    include: { rendezvous: { include: { creneauReserve: true } } },
-  });
-
-  if (!demande) throw new NotFoundException(`Demande #${id} introuvable`);
-  if (demande.statutDemande === StatutDemande.EN_COURS_TRAITEMENT) {
-    throw new ConflictException('Cette demande est déjà en cours de traitement');
-  }
-  if (!demande.rendezvous) {
-    throw new BadRequestException('Aucun rendez-vous associé à cette demande');
-  }
-
-  // ✅ Mettre à jour les deux en même temps
-  const [demandeMiseAJour] = await this.prisma.$transaction([
-
-    this.prisma.demandePartenaire.update({
+    const demande = await this.prisma.demandePartenaire.findUnique({
       where: { id },
-      data: { statutDemande: StatutDemande.EN_COURS_TRAITEMENT },
-      include: { rendezvous: true },
-    }),
-
-    // ✅ Ajout — passer le statut du RDV à CONFIRME
-    this.prisma.rendezvous.update({
-      where: { id: demande.rendezvous.id },
-      data: { statut: StatutRendezvous.CONFIRME },
-    }),
-
-  ]);
-
-  this.gateway.notifyStatutChange({ id, statut: 'EN_COURS_TRAITEMENT' });
-
-  try {
-    await this.emailService.sendConfirmationRendezvousPartenaire({
-      email:     demandeMiseAJour.email,
-      nom:       demandeMiseAJour.nom,
-      entite:    demandeMiseAJour.entite,
-      typeRdv:   demandeMiseAJour.rendezvous.typeRdv,
-      dateRdv:   demandeMiseAJour.rendezvous.dateRdv,
-      creneau:   demandeMiseAJour.rendezvous.creneau,
-      lienVisio: demandeMiseAJour.rendezvous.lienVisio,
-      adresse:   demandeMiseAJour.rendezvous.adresse,
+      include: { rendezvous: { include: { creneauReserve: true } } },
     });
-  } catch (error: any) {
-    console.error('❌ Erreur envoi email confirmation RDV:', error.message);
-  }
 
-  return {
-    success: true,
-    message: 'Demande passée en cours de traitement avec succès',
-    demande: demandeMiseAJour,
-  };
-}
+    if (!demande) throw new NotFoundException(`Demande #${id} introuvable`);
+    if (demande.statutDemande === StatutDemande.EN_COURS_TRAITEMENT) {
+      throw new ConflictException('Cette demande est déjà en cours de traitement');
+    }
+    if (!demande.rendezvous) {
+      throw new BadRequestException('Aucun rendez-vous associé à cette demande');
+    }
+
+    const [demandeMiseAJour] = await this.prisma.$transaction([
+      this.prisma.demandePartenaire.update({
+        where: { id },
+        data: { statutDemande: StatutDemande.EN_COURS_TRAITEMENT },
+        include: { rendezvous: true },
+      }),
+      this.prisma.rendezvous.update({
+        where: { id: demande.rendezvous.id },
+        data: { statut: StatutRendezvous.CONFIRME },
+      }),
+    ]);
+
+    this.gateway.notifyStatutChange({ id, statut: 'EN_COURS_TRAITEMENT' });
+
+    try {
+      await this.emailService.sendConfirmationRendezvousPartenaire({
+        email:     demandeMiseAJour.email,
+        nom:       demandeMiseAJour.nom,
+        entite:    demandeMiseAJour.entite,
+        typeRdv:   demandeMiseAJour.rendezvous.typeRdv,
+        dateRdv:   demandeMiseAJour.rendezvous.dateRdv,
+        creneau:   demandeMiseAJour.rendezvous.creneau,
+        lienVisio: demandeMiseAJour.rendezvous.lienVisio,
+        adresse:   demandeMiseAJour.rendezvous.adresse,
+      });
+    } catch (error: any) {
+      console.error('❌ Erreur envoi email confirmation RDV:', error.message);
+    }
+
+    return {
+      success: true,
+      message: 'Demande passée en cours de traitement avec succès',
+      demande: demandeMiseAJour,
+    };
+  }
 
   // ================== ACCEPTER ==================
 
@@ -300,38 +356,11 @@ export class DemandePartenaireService {
     ).join('');
   }
 
-  private async saveContratFile(
-    demandeId: number,
-    file: FastifyFileKV,
-  ): Promise<{ cheminDocument: string; nomFichier: string; tailleDocument: number }> {
-    if (!file?.mimetype) {
-      throw new BadRequestException('Contrat: fichier invalide (mimetype manquant)');
-    }
-    if (file.mimetype !== 'application/pdf') {
-      throw new BadRequestException(
-        `Contrat: type non autorisé (${file.mimetype}). Seul PDF est accepté.`,
-      );
-    }
-
-    const uploadDir = path.join(process.cwd(), 'uploads', 'contrats', String(demandeId));
-    await fs.mkdir(uploadDir, { recursive: true });
-
-    const uniqueName = `contrat_${uuidv4()}${path.extname(file.filename)}`;
-    const filePath = path.join(uploadDir, uniqueName);
-    await fs.writeFile(filePath, file.value);
-
-    return {
-      cheminDocument: `/uploads/contrats/${demandeId}/${uniqueName}`,
-      nomFichier: file.filename,
-      tailleDocument: file.value.length,
-    };
-  }
-
-     async accepterDemande(id: number, dto: AccepterDemandeDto, contratFiles: FastifyFileKV[]) {
-      const demande = await this.prisma.demandePartenaire.findUnique({
+  async accepterDemande(id: number, dto: AccepterDemandeDto, contratFiles: FastifyFileKV[]) {
+    const demande = await this.prisma.demandePartenaire.findUnique({
       where: { id },
       include: { rendezvous: true, contrat: true },
-      });
+    });
 
     if (!demande) throw new NotFoundException(`Demande #${id} introuvable`);
     if (demande.statutDemande === StatutDemande.ACCEPTEE) {
@@ -347,20 +376,20 @@ export class DemandePartenaireService {
       throw new BadRequestException('Un seul fichier contrat est autorisé');
     }
 
-    const contratFile = contratFiles[0];
+    // ── Upload contrat vers Supabase (avant la transaction Prisma)
     const { cheminDocument, nomFichier, tailleDocument } =
-      await this.saveContratFile(id, contratFile);
+      await this.saveContratFile(id, contratFiles[0]);
 
-    const profileToken      = crypto.randomBytes(32).toString('hex');
+    const profileToken       = crypto.randomBytes(32).toString('hex');
     const profileTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    const codePartenaire    = this.generatePartnerCode();
+    const codePartenaire     = this.generatePartnerCode();
 
     const { contrat, demandeAcceptee } = await this.prisma.$transaction(async (tx) => {
       const contrat = await tx.contratPartenaire.create({
         data: {
           dateSignature:           new Date(dto.dateSignature),
           dateFinContrat:          new Date(dto.dateFinContrat),
-          cheminDocument,
+          cheminDocument,          // ✅ URL publique Supabase
           nomFichier,
           tailleDocument,
           notesInternes:           dto.notesInternes,
@@ -386,11 +415,9 @@ export class DemandePartenaireService {
       return { contrat, demandeAcceptee };
     });
 
-    // ✅ Notifier WebSocket → retirer de la liste
     this.gateway.notifyStatutChange({ id, statut: 'ACCEPTEE' });
 
     const profileUrl = `${process.env.FRONTEND_URL}/formulaire/partenaire/inscription-formulaire/${profileToken}?code=${codePartenaire}`;
-    const contratPath = path.join(process.cwd(), contrat.cheminDocument.replace(/^\//, ''));
 
     try {
       await this.emailService.sendAcceptationPartenaireAvecProfil({
@@ -401,7 +428,7 @@ export class DemandePartenaireService {
         dateExpiration:       profileTokenExpiry,
         dateSignatureContrat: contrat.dateSignature,
         dateFinContrat:       contrat.dateFinContrat,
-        contratPath,
+        contratPath:          contrat.cheminDocument, // ✅ URL publique Supabase
         contratName:          contrat.nomFichier,
         codePartenaire,
       });
@@ -452,7 +479,6 @@ export class DemandePartenaireService {
       return updated;
     });
 
-    // ✅ Notifier WebSocket → retirer de la liste
     this.gateway.notifyStatutChange({ id, statut: 'REFUSEE' });
 
     try {
@@ -612,6 +638,7 @@ export class DemandePartenaireService {
       where: { id },
       include: {
         rendezvous: { include: { creneauReserve: true } },
+        contrat: { select: { cheminDocument: true } }, // ✅ récupérer l'URL du contrat
       },
     });
 
@@ -621,6 +648,19 @@ export class DemandePartenaireService {
       throw new BadRequestException(
         'Impossible de supprimer une demande acceptée avec un partenaire associé',
       );
+    }
+
+    // ── Supprimer le contrat depuis Supabase Storage (non-bloquant)
+    if (demande.contrat?.cheminDocument) {
+      const storagePath = this.extractStoragePath(demande.contrat.cheminDocument);
+      if (storagePath) {
+        const { error } = await this.supabase.storage
+          .from(DemandePartenaireService.BUCKET)
+          .remove([storagePath]);
+        if (error) {
+          console.error(`Supabase delete contrat error (demande #${id}):`, error.message);
+        }
+      }
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -646,164 +686,149 @@ export class DemandePartenaireService {
 
   // ================== REPORTER ==================
 
-async reporter(id: number, nouvelleDateRdv: string, nouveauCreneau: string) {
-  // 1. Vérifier que la demande existe
-  const demande = await this.prisma.demandePartenaire.findUnique({
-    where: { id },
-    include: { rendezvous: { include: { creneauReserve: true } } },
-  });
+  async reporter(id: number, nouvelleDateRdv: string, nouveauCreneau: string) {
+    const demande = await this.prisma.demandePartenaire.findUnique({
+      where: { id },
+      include: { rendezvous: { include: { creneauReserve: true } } },
+    });
 
-  if (!demande) throw new NotFoundException(`Demande #${id} introuvable`);
+    if (!demande) throw new NotFoundException(`Demande #${id} introuvable`);
 
-  if (!demande.rendezvous) {
-    throw new BadRequestException('Aucun rendez-vous associé à cette demande');
-  }
-
-  if (demande.statutDemande === StatutDemande.ACCEPTEE) {
-    throw new ConflictException('Impossible de reporter une demande déjà acceptée');
-  }
-
-  if (demande.statutDemande === StatutDemande.REFUSEE) {
-    throw new ConflictException('Impossible de reporter une demande refusée');
-  }
-
-  // 2. Vérifier que la nouvelle date n'est pas dans le passé
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const rdvDate = new Date(nouvelleDateRdv);
-  rdvDate.setHours(0, 0, 0, 0);
-  if (rdvDate < today) {
-    throw new BadRequestException('La nouvelle date ne peut pas être dans le passé');
-  }
-
-  // 3. Vérifier que la nouvelle date n'est pas bloquée
-  const dateBloquee = await this.prisma.dateIndisponible.findFirst({
-    where: { date: new Date(nouvelleDateRdv), estActif: true },
-  });
-  if (dateBloquee) {
-    throw new BadRequestException(
-      `La date ${nouvelleDateRdv} n'est pas disponible (${dateBloquee.motif})`,
-    );
-  }
-
-  // 4. Transaction :
-  //    - Libérer l'ancien créneau
-  //    - Créer le nouveau créneau
-  //    - Mettre à jour le rendez-vous
-  //    - Remettre statut EN_ATTENTE
-  const demandeReportee = await this.prisma.$transaction(async (tx) => {
-    // Libérer l'ancien créneau réservé
-    if (demande.rendezvous.creneauReserveId) {
-      await tx.creneauReserve.update({
-        where: { id: demande.rendezvous.creneauReserveId },
-        data: { estActif: false },
-      });
+    if (!demande.rendezvous) {
+      throw new BadRequestException('Aucun rendez-vous associé à cette demande');
     }
 
-    // Vérifier que le nouveau créneau est libre
-    const creneauExistant = await tx.creneauReserve.findUnique({
-      where: {
-        date_creneau: {
-          date: new Date(nouvelleDateRdv),
-          creneau: nouveauCreneau,
-        },
-      },
+    if (demande.statutDemande === StatutDemande.ACCEPTEE) {
+      throw new ConflictException('Impossible de reporter une demande déjà acceptée');
+    }
+
+    if (demande.statutDemande === StatutDemande.REFUSEE) {
+      throw new ConflictException('Impossible de reporter une demande refusée');
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const rdvDate = new Date(nouvelleDateRdv);
+    rdvDate.setHours(0, 0, 0, 0);
+    if (rdvDate < today) {
+      throw new BadRequestException('La nouvelle date ne peut pas être dans le passé');
+    }
+
+    const dateBloquee = await this.prisma.dateIndisponible.findFirst({
+      where: { date: new Date(nouvelleDateRdv), estActif: true },
     });
-    if (creneauExistant && creneauExistant.estActif) {
-      throw new ConflictException(
-        `Le créneau ${nouveauCreneau} est déjà réservé pour le ${nouvelleDateRdv}`,
+    if (dateBloquee) {
+      throw new BadRequestException(
+        `La date ${nouvelleDateRdv} n'est pas disponible (${dateBloquee.motif})`,
       );
     }
 
-    // Créer le nouveau créneau réservé
-    const nouveauCreneauReserve = await tx.creneauReserve.create({
-      data: {
-        date:     new Date(nouvelleDateRdv),
-        creneau:  nouveauCreneau,
-        type:     TypeReservation.RENDEZ_VOUS,
-        motif:    `RDV reporté - ${demande.entite}`,
-        estActif: true,
-      },
+    const demandeReportee = await this.prisma.$transaction(async (tx) => {
+      if (demande.rendezvous.creneauReserveId) {
+        await tx.creneauReserve.update({
+          where: { id: demande.rendezvous.creneauReserveId },
+          data: { estActif: false },
+        });
+      }
+
+      const creneauExistant = await tx.creneauReserve.findUnique({
+        where: {
+          date_creneau: {
+            date: new Date(nouvelleDateRdv),
+            creneau: nouveauCreneau,
+          },
+        },
+      });
+      if (creneauExistant && creneauExistant.estActif) {
+        throw new ConflictException(
+          `Le créneau ${nouveauCreneau} est déjà réservé pour le ${nouvelleDateRdv}`,
+        );
+      }
+
+      const nouveauCreneauReserve = await tx.creneauReserve.create({
+        data: {
+          date:     new Date(nouvelleDateRdv),
+          creneau:  nouveauCreneau,
+          type:     TypeReservation.RENDEZ_VOUS,
+          motif:    `RDV reporté - ${demande.entite}`,
+          estActif: true,
+        },
+      });
+
+      await tx.rendezvous.update({
+        where: { id: demande.rendezvous.id },
+        data: {
+          dateRdv:          new Date(nouvelleDateRdv),
+          creneau:          nouveauCreneau,
+          statut:           StatutRendezvous.PLANIFIE,
+          creneauReserveId: nouveauCreneauReserve.id,
+        },
+      });
+
+      return tx.demandePartenaire.update({
+        where: { id },
+        data: { statutDemande: StatutDemande.EN_ATTENTE },
+        include: { rendezvous: true },
+      });
     });
 
-    // Mettre à jour le rendez-vous
-    await tx.rendezvous.update({
-      where: { id: demande.rendezvous.id },
-      data: {
-        dateRdv:          new Date(nouvelleDateRdv),
-        creneau:          nouveauCreneau,
-        statut:           StatutRendezvous.PLANIFIE,
-        creneauReserveId: nouveauCreneauReserve.id,
-      },
-    });
+    this.gateway.notifyStatutChange({ id, statut: 'EN_ATTENTE' });
 
-    // Remettre la demande EN_ATTENTE
-    return tx.demandePartenaire.update({
-      where: { id },
-      data: { statutDemande: StatutDemande.EN_ATTENTE },
-      include: { rendezvous: true },
-    });
-  });
+    try {
+      await this.emailService.sendReportRendezvousPartenaire({
+        email:   demandeReportee.email,
+        nom:     demandeReportee.nom,
+        entite:  demandeReportee.entite,
+        typeRdv: demandeReportee.rendezvous.typeRdv,
+        dateRdv: demandeReportee.rendezvous.dateRdv,
+        creneau: demandeReportee.rendezvous.creneau,
+      });
+    } catch (error: any) {
+      console.error('❌ Erreur envoi email report RDV:', error.message);
+    }
 
-  // 5. Notifier WebSocket → statut revient EN_ATTENTE
-  this.gateway.notifyStatutChange({ id, statut: 'EN_ATTENTE' });
-
-  // 6. Envoyer email au partenaire
-  try {
-    await this.emailService.sendReportRendezvousPartenaire({
-      email:    demandeReportee.email,
-      nom:      demandeReportee.nom,
-      entite:   demandeReportee.entite,
-      typeRdv:  demandeReportee.rendezvous.typeRdv,
-      dateRdv:  demandeReportee.rendezvous.dateRdv,
-      creneau:  demandeReportee.rendezvous.creneau,
-    });
-  } catch (error: any) {
-    console.error('❌ Erreur envoi email report RDV:', error.message);
+    return {
+      success: true,
+      message: 'Rendez-vous reporté avec succès',
+      demande: demandeReportee,
+    };
   }
 
-  return {
-    success: true,
-    message: 'Rendez-vous reporté avec succès',
-    demande: demandeReportee,
-  };
-}
+  // ================== LISTE DES RENDEZ-VOUS ==================
 
-// ================== LISTE DES RENDEZ-VOUS ==================
-
-async findAllRendezvous() {
-  const rendezvous = await this.prisma.rendezvous.findMany({
-    include: {
-      demandePartenaire: {
-        select: {
-          id: true,
-          email: true,
-          nom: true,
-          entite: true,
-          statutDemande: true,
+  async findAllRendezvous() {
+    const rendezvous = await this.prisma.rendezvous.findMany({
+      include: {
+        demandePartenaire: {
+          select: {
+            id: true,
+            email: true,
+            nom: true,
+            entite: true,
+            statutDemande: true,
+          },
         },
+        creneauReserve: true,
       },
-      creneauReserve: true,
-    },
-    orderBy: { dateRdv: 'asc' },
-  });
+      orderBy: { dateRdv: 'asc' },
+    });
 
-  return {
-    success: true,
-    count: rendezvous.length,
-    rendezvous: rendezvous.map((rdv) => ({
-      id: rdv.id,
-      typeRdv: rdv.typeRdv,
-      dateRdv: rdv.dateRdv,
-      creneau: rdv.creneau,
-      statut: rdv.statut,
-      lienVisio: rdv.lienVisio,
-      adresse: rdv.adresse,
-      email: rdv.demandePartenaire?.email,
-      nom: rdv.demandePartenaire?.nom,
-      entite: rdv.demandePartenaire?.entite,
-      statutDemande: rdv.demandePartenaire?.statutDemande,
-    })),
-  };
-}
+    return {
+      success: true,
+      count: rendezvous.length,
+      rendezvous: rendezvous.map((rdv) => ({
+        id: rdv.id,
+        typeRdv: rdv.typeRdv,
+        dateRdv: rdv.dateRdv,
+        creneau: rdv.creneau,
+        statut: rdv.statut,
+        lienVisio: rdv.lienVisio,
+        adresse: rdv.adresse,
+        email: rdv.demandePartenaire?.email,
+        nom: rdv.demandePartenaire?.nom,
+        entite: rdv.demandePartenaire?.entite,
+        statutDemande: rdv.demandePartenaire?.statutDemande,
+      })),
+    };
+  }
 }

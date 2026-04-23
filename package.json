@@ -43,6 +43,7 @@
     "@nestjs/websockets": "^11.1.16",
     "@prisma/adapter-pg": "5.22.0",
     "@prisma/client": "^6.19.2",
+    "@supabase/supabase-js": "^2.104.0",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",

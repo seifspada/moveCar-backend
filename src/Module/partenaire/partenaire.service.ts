@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import * as path from 'path';
-import * as fs from 'fs/promises';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { DemandePartenaire, StatutDemande } from '@prisma/client';
 import { CreatePartenaireProfileDto } from './dto/create-partenaire-profile.dto';
@@ -23,7 +23,15 @@ interface FastifyFileKV {
 export class PartenaireService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // ✅ Types MIME autorisés pour la photo
+  // ================== SUPABASE ==================
+
+  private supabase: SupabaseClient = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!,
+  );
+
+  private static readonly BUCKET = 'documents';
+
   private static readonly ALLOWED_PHOTO_MIME = new Set([
     'image/jpeg',
     'image/jpg',
@@ -31,7 +39,8 @@ export class PartenaireService {
     'image/webp',
   ]);
 
-  // ✅ Valider le type de fichier photo
+  // ================== HELPERS FICHIERS ==================
+
   private assertValidPhoto(file: FastifyFileKV) {
     if (!file?.mimetype) {
       throw new BadRequestException('Photo invalide (mimetype manquant)');
@@ -46,42 +55,63 @@ export class PartenaireService {
     }
   }
 
-  // ✅ Sauvegarder la photo dans le dossier partenaire
+  /**
+   * Upload la photo d'un partenaire vers Supabase Storage.
+   * Retourne l'URL publique à stocker dans photoUrl / user.photo.
+   */
   private async savePhoto(demandeId: number, file: FastifyFileKV): Promise<string> {
     this.assertValidPhoto(file);
 
-    const profileDir = path.join(
-      process.cwd(),
-      'uploads',
-      'partenaires',       // 📁 dossier séparé des adhérents
-      String(demandeId),
-      'profile',
-    );
-
-    await fs.mkdir(profileDir, { recursive: true });
-
     const ext = path.extname(file.filename);
     const fileName = `photo_${uuidv4()}${ext}`;
-    const filePath = path.join(profileDir, fileName);
+    const storagePath = `partenaires/${demandeId}/profile/${fileName}`;
 
-    await fs.writeFile(filePath, file.value);
+    const { error } = await this.supabase.storage
+      .from(PartenaireService.BUCKET)
+      .upload(storagePath, file.value, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
 
-    return `/uploads/partenaires/${demandeId}/profile/${fileName}`;
+    if (error) {
+      throw new Error(`Upload photo partenaire échoué: ${error.message}`);
+    }
+
+    const { data } = this.supabase.storage
+      .from(PartenaireService.BUCKET)
+      .getPublicUrl(storagePath);
+
+    return data.publicUrl;
   }
 
-  // ✅ Méthode publique appelée par le contrôleur
+  /**
+   * Supprime une photo depuis Supabase Storage via son URL publique.
+   */
+  private async deletePhoto(publicUrl: string): Promise<void> {
+    const marker = `/object/public/${PartenaireService.BUCKET}/`;
+    const idx = publicUrl.indexOf(marker);
+    if (idx === -1) return;
+    const storagePath = publicUrl.slice(idx + marker.length);
+
+    const { error } = await this.supabase.storage
+      .from(PartenaireService.BUCKET)
+      .remove([storagePath]);
+
+    if (error) {
+      console.error('Supabase delete photo partenaire error:', error.message);
+    }
+  }
+
+  // ================== CRÉATION PROFIL ==================
+
   async createProfilPartenaireFromToken(
     profileToken: string,
     codePartenaire: string,
     dto: CreatePartenaireProfileDto,
-    photoFile: FastifyFileKV | undefined,  // ✅ AJOUTÉ
+    photoFile: FastifyFileKV | undefined,
   ) {
-    console.log('🔍 Recherche demande partenaire avec:', {
-      profileToken,
-      codePartenaire,
-    });
+    console.log('🔍 Recherche demande partenaire avec:', { profileToken, codePartenaire });
 
-    // 1) Chercher la demande
     const demande = await this.prisma.demandePartenaire.findFirst({
       where: {
         profileToken,
@@ -110,24 +140,16 @@ export class PartenaireService {
       throw new NotFoundException('Demande introuvable, expirée ou déjà utilisée');
     }
 
-    // 2) Vérifier expiration
     if (demande.profileTokenExpiry && demande.profileTokenExpiry < new Date()) {
-      console.error('❌ Token expiré:', {
-        expiry: demande.profileTokenExpiry,
-        now: new Date(),
-      });
+      console.error('❌ Token expiré:', { expiry: demande.profileTokenExpiry, now: new Date() });
       throw new BadRequestException('Token expiré');
     }
 
-    // 3) Vérifier statut
     if (demande.statutDemande !== StatutDemande.ACCEPTEE) {
       console.error('❌ Statut invalide:', demande.statutDemande);
-      throw new BadRequestException(
-        `Demande non acceptée (statut: ${demande.statutDemande})`,
-      );
+      throw new BadRequestException(`Demande non acceptée (statut: ${demande.statutDemande})`);
     }
 
-    // 4) Vérifier partenaire existant
     if (demande.partenaire) {
       console.error('❌ Partenaire déjà créé');
       throw new ConflictException('Un profil a déjà été créé pour cette demande');
@@ -135,14 +157,13 @@ export class PartenaireService {
 
     console.log('✅ Validations OK, création du profil partenaire...');
 
-    // 5) Déléguer à la méthode core
-    return this.createProfilPartenaireCore(demande, dto, photoFile); // ✅ AJOUTÉ
+    return this.createProfilPartenaireCore(demande, dto, photoFile);
   }
 
   private async createProfilPartenaireCore(
     demande: DemandePartenaire,
     dto: CreatePartenaireProfileDto,
-    photoFile: FastifyFileKV | undefined,  // ✅ AJOUTÉ
+    photoFile: FastifyFileKV | undefined,
   ) {
     // 1) Vérifier email côté demande adhésion
     const existingAdhesionDemand = await this.prisma.demandeAdhesion.findFirst({
@@ -193,10 +214,10 @@ export class PartenaireService {
       );
     }
 
-    // 6) ✅ Traitement de la photo (optionnelle)
+    // 6) Upload photo vers Supabase (optionnelle)
     let photoUrl: string | undefined;
     if (photoFile) {
-      console.log('📸 Sauvegarde de la photo partenaire...');
+      console.log('📸 Upload photo partenaire vers Supabase...');
       photoUrl = await this.savePhoto(demande.id, photoFile);
     }
 
@@ -213,7 +234,7 @@ export class PartenaireService {
           email: dto.email,
           password: hashedPassword,
           roleId: partenaireRole.id,
-          photo: photoUrl ?? null,  // ✅ AJOUTÉ
+          photo: photoUrl ?? null, // ✅ URL publique Supabase
         },
       });
 
@@ -229,7 +250,7 @@ export class PartenaireService {
           ville: dto.ville,
           codePartenaire: demande.codePartenaire,
           userId: user.id,
-          photoUrl: photoUrl ?? null,  // ✅ AJOUTÉ
+          photoUrl: photoUrl ?? null, // ✅ URL publique Supabase
           demandeInitiale: {
             connect: { id: demande.id },
           },
@@ -240,7 +261,7 @@ export class PartenaireService {
               id: true,
               email: true,
               name: true,
-              photo: true,  // ✅ AJOUTÉ
+              photo: true,
             },
           },
         },
@@ -272,12 +293,13 @@ export class PartenaireService {
         entiteAgence: partenaire.entiteAgence,
         adresseAgence: partenaire.adresseAgence,
         ville: partenaire.ville,
-        photoUrl: partenaire.photoUrl,  // ✅ AJOUTÉ
+        photoUrl: partenaire.photoUrl, // ✅ URL publique Supabase
         user: partenaire.user,
       },
     };
   }
 
+  // ================== CRUD ==================
 
   async findOne(id: number) {
     const partenaire = await this.prisma.partenaire.findUnique({
@@ -304,19 +326,19 @@ export class PartenaireService {
       throw new NotFoundException('Partenaire introuvable');
     }
 
-   return this.prisma.partenaire.update({
-  where: { id },
-  data: {
-    nom: dto.nom ?? partenaire.nom,
-    prenom: dto.prenom ?? partenaire.prenom,
-    entiteGroupe: dto.entiteGroupe ?? partenaire.entiteGroupe,
-    entiteAgence: dto.entiteAgence ?? partenaire.entiteAgence,
-    email: dto.email ?? partenaire.email,
-    telephone: dto.telephone ?? partenaire.telephone,
-    adresseAgence: dto.adresseAgence ?? partenaire.adresseAgence,
-    ville: dto.ville ?? partenaire.ville,
-  },
-});
+    return this.prisma.partenaire.update({
+      where: { id },
+      data: {
+        nom:           dto.nom           ?? partenaire.nom,
+        prenom:        dto.prenom        ?? partenaire.prenom,
+        entiteGroupe:  dto.entiteGroupe  ?? partenaire.entiteGroupe,
+        entiteAgence:  dto.entiteAgence  ?? partenaire.entiteAgence,
+        email:         dto.email         ?? partenaire.email,
+        telephone:     dto.telephone     ?? partenaire.telephone,
+        adresseAgence: dto.adresseAgence ?? partenaire.adresseAgence,
+        ville:         dto.ville         ?? partenaire.ville,
+      },
+    });
   }
 
   async findAll() {
@@ -329,135 +351,142 @@ export class PartenaireService {
     });
   }
 
-async remove(id: number) {
-  const partenaire = await this.prisma.partenaire.findUnique({
-    where: { id },
-  });
+  // ================== SUPPRESSION ==================
 
-  if (!partenaire) throw new NotFoundException('Partenaire introuvable');
-
-  // 1. Détacher les demandes
-  await this.prisma.demandePartenaire.updateMany({
-    where: { partenaireId: id },
-    data: { partenaireId: null },
-  });
-
-  // 2. Récupérer les IDs des missions
-  const missions = await this.prisma.mission.findMany({
-    where: { partenaireId: id },
-    select: { id: true },
-  });
-  const missionIds = missions.map((m) => m.id);
-
-  // 3. Supprimer les réservations des missions
-  if (missionIds.length > 0) {
-    await this.prisma.reservationMission.deleteMany({
-      where: { missionId: { in: missionIds } },
+  async remove(id: number) {
+    const partenaire = await this.prisma.partenaire.findUnique({
+      where: { id },
     });
-  }
 
-  // 4. Supprimer les missions
-  await this.prisma.mission.deleteMany({
-    where: { partenaireId: id },
-  });
+    if (!partenaire) throw new NotFoundException('Partenaire introuvable');
 
-  // 5. Récupérer les agences du partenaire
-  const agences = await this.prisma.agence.findMany({
-    where: { partenaireId: id },
-    select: { id: true },
-  });
-  const agenceIds = agences.map((a) => a.id);
+    // ── Supprimer la photo du partenaire depuis Supabase (non-bloquant)
+    if (partenaire.photoUrl) {
+      await this.deletePhoto(partenaire.photoUrl);
+    }
 
-  // 6. Récupérer les agents des agences
-  const agents = await this.prisma.agent.findMany({
-    where: { agenceId: { in: agenceIds } },
-    select: { id: true, userId: true },
-  });
-  const agentIds    = agents.map((a) => a.id);
-  const agentUserIds = agents
-    .map((a) => a.userId)
-    .filter((uid): uid is number => uid !== null);
-
-  // 7. ✅ Supprimer les véhicules via agentId (partenaireId n'existe plus)
-  if (agentIds.length > 0) {
-    await this.prisma.vehicule.deleteMany({
-      where: { agentId: { in: agentIds } },
+    // 1. Détacher les demandes
+    await this.prisma.demandePartenaire.updateMany({
+      where: { partenaireId: id },
+      data: { partenaireId: null },
     });
-  }
 
-  // 8. Supprimer les agents
-  await this.prisma.agent.deleteMany({
-    where: { agenceId: { in: agenceIds } },
-  });
-
-  // 9. Supprimer les users des agents
-  if (agentUserIds.length > 0) {
-    await this.prisma.user.deleteMany({
-      where: { id: { in: agentUserIds } },
+    // 2. Récupérer les IDs des missions
+    const missions = await this.prisma.mission.findMany({
+      where: { partenaireId: id },
+      select: { id: true },
     });
-  }
+    const missionIds = missions.map((m) => m.id);
 
-  // 10. Supprimer les agences
-  if (agenceIds.length > 0) {
-    await this.prisma.agence.deleteMany({
+    // 3. Supprimer les réservations des missions
+    if (missionIds.length > 0) {
+      await this.prisma.reservationMission.deleteMany({
+        where: { missionId: { in: missionIds } },
+      });
+    }
+
+    // 4. Supprimer les missions
+    await this.prisma.mission.deleteMany({
       where: { partenaireId: id },
     });
-  }
 
-  // 11. Supprimer le user partenaire
-  if (partenaire.userId) {
-    await this.prisma.user.delete({
-      where: { id: partenaire.userId },
+    // 5. Récupérer les agences du partenaire
+    const agences = await this.prisma.agence.findMany({
+      where: { partenaireId: id },
+      select: { id: true },
+    });
+    const agenceIds = agences.map((a) => a.id);
+
+    // 6. Récupérer les agents des agences
+    const agents = await this.prisma.agent.findMany({
+      where: { agenceId: { in: agenceIds } },
+      select: { id: true, userId: true, photo: true }, // ✅ photo ajoutée pour nettoyage Supabase
+    });
+    const agentIds     = agents.map((a) => a.id);
+    const agentUserIds = agents
+      .map((a) => a.userId)
+      .filter((uid): uid is number => uid !== null);
+
+    // ── Supprimer les photos des agents depuis Supabase (non-bloquant)
+    for (const agent of agents) {
+      if (agent.photo) {
+        await this.deletePhoto(agent.photo).catch(() => undefined);
+      }
+    }
+
+    // 7. Supprimer les véhicules via agentId
+    if (agentIds.length > 0) {
+      await this.prisma.vehicule.deleteMany({
+        where: { agentId: { in: agentIds } },
+      });
+    }
+
+    // 8. Supprimer les agents
+    await this.prisma.agent.deleteMany({
+      where: { agenceId: { in: agenceIds } },
+    });
+
+    // 9. Supprimer les users des agents
+    if (agentUserIds.length > 0) {
+      await this.prisma.user.deleteMany({
+        where: { id: { in: agentUserIds } },
+      });
+    }
+
+    // 10. Supprimer les agences
+    if (agenceIds.length > 0) {
+      await this.prisma.agence.deleteMany({
+        where: { partenaireId: id },
+      });
+    }
+
+    // 11. Supprimer le user partenaire
+    if (partenaire.userId) {
+      await this.prisma.user.delete({
+        where: { id: partenaire.userId },
+      });
+    }
+
+    // 12. Supprimer le partenaire
+    return this.prisma.partenaire.delete({
+      where: { id },
     });
   }
 
-  // 12. Supprimer le partenaire
-  return this.prisma.partenaire.delete({
-    where: { id },
-  });
-}
+  // ================== NAVBAR ==================
 
+  async findNavbarPartenaireByUserId(userId: number) {
+    console.log('🔍 Recherche partenaire pour userId:', userId);
 
-
-async findNavbarPartenaireByUserId(userId: number) {
-  console.log('🔍 Recherche partenaire pour userId:', userId);
-
-  const partenaire = await this.prisma.partenaire.findFirst({
-    where: { userId },
-    select: {
-      entiteGroupe: true,
-      entiteAgence: true,
-      photoUrl: true,          // ✅ Photo du partenaire
-      user: {
-        select: {
-          email: true,
-          photo: true,         // ✅ Photo du user (fallback)
+    const partenaire = await this.prisma.partenaire.findFirst({
+      where: { userId },
+      select: {
+        entiteGroupe: true,
+        entiteAgence: true,
+        photoUrl: true,
+        user: {
+          select: {
+            email: true,
+            photo: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  if (!partenaire) {
-    console.error('❌ Partenaire introuvable pour userId:', userId);
-    throw new NotFoundException('Partenaire introuvable');
+    if (!partenaire) {
+      console.error(' Partenaire introuvable pour userId:', userId);
+      throw new NotFoundException('Partenaire introuvable');
+    }
+
+    const entite = partenaire.entiteAgence || partenaire.entiteGroupe;
+    const photo  = partenaire.photoUrl ?? partenaire.user.photo ?? null;
+
+    console.log('✅ Partenaire trouvé:', entite, '-', partenaire.user.email);
+
+    return {
+      entite,
+      email: partenaire.user.email,
+      photo, // ✅ URL publique Supabase
+    };
   }
-
-  const entite = partenaire.entiteAgence || partenaire.entiteGroupe;
-
-  // ✅ Priorité : photoUrl du partenaire, sinon photo du user
-  const photo = partenaire.photoUrl ?? partenaire.user.photo ?? null;
-
-  console.log('✅ Partenaire trouvé:', entite, '-', partenaire.user.email);
-
-  return {
-    entite,
-    email: partenaire.user.email,
-    photo,                     // ✅ AJOUTÉ
-  };
-}
-
-
-
-
-
 }

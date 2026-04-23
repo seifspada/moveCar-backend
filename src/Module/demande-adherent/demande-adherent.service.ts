@@ -5,8 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { StatutDemande, StatutDocument, TypeDocument } from '@prisma/client';
-import { promises as fs } from 'fs';
-import * as path from 'path';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
 import { v4 as uuidv4 } from 'uuid';
 import { randomBytes } from 'crypto';
 
@@ -32,7 +32,12 @@ export class DemandeAdherentService {
 
   // ================== CONSTANTES ==================
 
-  private static readonly UPLOAD_FOLDER = 'demandes-adhesion';
+  private supabase: SupabaseClient = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_KEY!,
+  );
+
+  private static readonly BUCKET = 'documents';
 
   private static readonly ALLOWED_MIME = new Set([
     'application/pdf',
@@ -95,26 +100,52 @@ export class DemandeAdherentService {
     }
   }
 
-  private async saveFile(uploadDir: string, key: string, f: FastifyFileKV) {
+  /**
+   * Upload un fichier vers Supabase Storage.
+   * Retourne l'URL publique à stocker dans cheminFichier.
+   */
+  private async saveFile(
+    demandeId: number,
+    key: string,
+    f: FastifyFileKV,
+  ): Promise<{ publicUrl: string }> {
     this.assertAllowedFile(key, f);
-    await fs.mkdir(uploadDir, { recursive: true });
-    const fileName = `${key}_${uuidv4()}${path.extname(f.filename)}`;
-    const filePath = path.join(uploadDir, fileName);
-    await fs.writeFile(filePath, f.value);
-    return { fileName };
+
+    const ext = f.filename.split('.').pop();
+    const fileName = `${key}_${uuidv4()}.${ext}`;
+    const storagePath = `demandes-adhesion/${demandeId}/${fileName}`;
+
+    const { error } = await this.supabase.storage
+      .from(DemandeAdherentService.BUCKET)
+      .upload(storagePath, f.value, {
+        contentType: f.mimetype,
+        upsert: true,
+      });
+
+    if (error) {
+      throw new Error(`Upload Supabase échoué (${key}): ${error.message}`);
+    }
+
+    const { data } = this.supabase.storage
+      .from(DemandeAdherentService.BUCKET)
+      .getPublicUrl(storagePath);
+
+    return { publicUrl: data.publicUrl };
   }
 
-  private getUploadDir(demandeId: number): string {
-    return path.join(
-      process.cwd(),
-      'uploads',
-      DemandeAdherentService.UPLOAD_FOLDER,
-      String(demandeId),
-    );
-  }
-
-  private getCheminFichier(demandeId: number, fileName: string): string {
-    return `/uploads/${DemandeAdherentService.UPLOAD_FOLDER}/${demandeId}/${fileName}`;
+  /**
+   * Extrait le storagePath depuis une URL publique Supabase.
+   * URL format : https://<project>.supabase.co/storage/v1/object/public/<bucket>/<storagePath>
+   */
+  private extractStoragePath(publicUrl: string): string | null {
+    try {
+      const marker = `/object/public/${DemandeAdherentService.BUCKET}/`;
+      const idx = publicUrl.indexOf(marker);
+      if (idx === -1) return null;
+      return publicUrl.slice(idx + marker.length);
+    } catch {
+      return null;
+    }
   }
 
   // ================== SELECT RÉUTILISABLE ==================
@@ -155,17 +186,14 @@ export class DemandeAdherentService {
       fichiers: doc.fichiers,
     };
 
-    // ✅ numero → uniquement pour PERMIS
     if (doc.typeDocument === TypeDocument.PERMIS && doc.numero !== null) {
       base.numero = doc.numero;
     }
 
-    // ✅ dateDebutValidite → uniquement si non null
     if (doc.dateDebutValidite !== null && doc.dateDebutValidite !== undefined) {
       base.dateDebutValidite = doc.dateDebutValidite;
     }
 
-    // ✅ dateFinValidite → uniquement si non null
     if (doc.dateFinValidite !== null && doc.dateFinValidite !== undefined) {
       base.dateFinValidite = doc.dateFinValidite;
     }
@@ -176,7 +204,6 @@ export class DemandeAdherentService {
   private cleanDemande(demande: any) {
     if (!demande) return null;
 
-    // ✅ Supprimer profileToken et profileTokenExpiry de la réponse
     const {
       profileToken,
       profileTokenExpiry,
@@ -261,16 +288,13 @@ export class DemandeAdherentService {
       },
     });
 
-    const uploadDir = this.getUploadDir(demande.id);
-    await fs.mkdir(uploadDir, { recursive: true });
-
     // ── Carte identité
     const carteFiles = files.carteIdentite ?? [];
     if (carteFiles.length === 2) {
-      const fileNames: string[] = [];
+      const publicUrls: string[] = [];
       for (const f of carteFiles) {
-        const { fileName } = await this.saveFile(uploadDir, 'carteIdentite', f);
-        fileNames.push(fileName);
+        const { publicUrl } = await this.saveFile(demande.id, 'carteIdentite', f);
+        publicUrls.push(publicUrl);
       }
       await this.prisma.document.create({
         data: {
@@ -278,8 +302,8 @@ export class DemandeAdherentService {
           statut: StatutDocument.EN_ATTENTE,
           demandeAdhesionId: demande.id,
           fichiers: {
-            create: fileNames.map((fileName) => ({
-              cheminFichier: this.getCheminFichier(demande.id, fileName),
+            create: publicUrls.map((publicUrl) => ({
+              cheminFichier: publicUrl,
             })),
           },
         },
@@ -289,10 +313,10 @@ export class DemandeAdherentService {
     // ── Permis
     const permisFiles = files.permisRectoVerso ?? [];
     if (permisFiles.length === 2) {
-      const fileNames: string[] = [];
+      const publicUrls: string[] = [];
       for (const f of permisFiles) {
-        const { fileName } = await this.saveFile(uploadDir, 'permisRectoVerso', f);
-        fileNames.push(fileName);
+        const { publicUrl } = await this.saveFile(demande.id, 'permisRectoVerso', f);
+        publicUrls.push(publicUrl);
       }
       await this.prisma.document.create({
         data: {
@@ -302,8 +326,8 @@ export class DemandeAdherentService {
           dateDebutValidite: new Date(dto.dateDebutValiditePermis),
           demandeAdhesionId: demande.id,
           fichiers: {
-            create: fileNames.map((fileName) => ({
-              cheminFichier: this.getCheminFichier(demande.id, fileName),
+            create: publicUrls.map((publicUrl) => ({
+              cheminFichier: publicUrl,
             })),
           },
         },
@@ -320,36 +344,33 @@ export class DemandeAdherentService {
     for (const [key, docType] of singlesSansOcr) {
       const arr = files[key] ?? [];
       if (!arr.length) continue;
-      const { fileName } = await this.saveFile(uploadDir, String(key), arr[0]);
+      const { publicUrl } = await this.saveFile(demande.id, String(key), arr[0]);
       await this.prisma.document.create({
         data: {
           typeDocument: docType,
           statut: StatutDocument.EN_ATTENTE,
           demandeAdhesionId: demande.id,
           fichiers: {
-            create: [
-              { cheminFichier: this.getCheminFichier(demande.id, fileName) },
-            ],
+            create: [{ cheminFichier: publicUrl }],
           },
         },
       });
     }
 
-    // ── Assurances avec OCR
+    // ── Assurances + KBIS avec OCR
     const singlesAvecOcr: Array<
       [keyof DemandeAdherentFiles, TypeDocument, string]
     > = [
       ['assuranceRcPro',         TypeDocument.RC_PRO,         'assuranceRcPro'],
       ['assuranceRcCirculation', TypeDocument.RC_CIRCULATION, 'assuranceRcCirculation'],
-      ['kbis',                   TypeDocument.KBIS,           'kbis'],  // ✅ AJOUTÉ
-
+      ['kbis',                   TypeDocument.KBIS,           'kbis'],
     ];
 
     for (const [key, docType, typeDocumentOcr] of singlesAvecOcr) {
       const arr = files[key] ?? [];
       if (!arr.length) continue;
       const f = arr[0];
-      const { fileName } = await this.saveFile(uploadDir, String(key), f);
+      const { publicUrl } = await this.saveFile(demande.id, String(key), f);
       const extracted = await this.tryExtractDates(f, typeDocumentOcr);
       await this.prisma.document.create({
         data: {
@@ -359,9 +380,7 @@ export class DemandeAdherentService {
           dateDebutValidite: extracted.dateDebutValidite,
           dateFinValidite: extracted.dateFinValidite,
           fichiers: {
-            create: [
-              { cheminFichier: this.getCheminFichier(demande.id, fileName) },
-            ],
+            create: [{ cheminFichier: publicUrl }],
           },
         },
       });
@@ -401,7 +420,6 @@ export class DemandeAdherentService {
       },
     });
 
-    // ── Notifier les admins en temps réel (sans bloquer si ça échoue)
     try {
       this.gateway.notifyNewDemande({
         email: dto.email,
@@ -412,7 +430,6 @@ export class DemandeAdherentService {
       });
     } catch (error: any) {
       console.error('Erreur notification gateway:', { email: dto.email, error: error.message });
-      // Continue even if WebSocket gateway fails
     }
 
     return this.cleanDemande(result);
@@ -437,7 +454,7 @@ export class DemandeAdherentService {
       },
       orderBy: { dateCreation: 'desc' },
     });
-    return results.map((d) => this.cleanDemande(d)); // ✅
+    return results.map((d) => this.cleanDemande(d));
   }
 
   async findOne(id: number) {
@@ -453,7 +470,7 @@ export class DemandeAdherentService {
     });
 
     if (!demande) throw new NotFoundException(`Demande #${id} non trouvée`);
-    return this.cleanDemande(demande); // ✅
+    return this.cleanDemande(demande);
   }
 
   async findByStatut(statut: StatutDemande) {
@@ -472,7 +489,7 @@ export class DemandeAdherentService {
       },
       orderBy: { dateCreation: 'desc' },
     });
-    return results.map((d) => this.cleanDemande(d)); // ✅
+    return results.map((d) => this.cleanDemande(d));
   }
 
   // ================== MISE À JOUR / ACCEPTATION ==================
@@ -489,110 +506,92 @@ export class DemandeAdherentService {
         },
       },
     });
-    return this.cleanDemande(result); // ✅
+    return this.cleanDemande(result);
   }
 
- // ✅ Dans accepter()
-async accepter(id: number) {
-  const demande = await this.prisma.demandeAdhesion.update({
-    where: { id },
-    data: { statut: StatutDemande.ACCEPTEE },
-  });
-
-  // ✅ Notifier le frontend de retirer cette demande de la liste
-  this.gateway.notifyStatutChange({ id, statut: 'ACCEPTEE' });
-
-  return demande;
-}
-
-// ✅ Dans refuser()
-async refuser(id: number, motif?: string) {
-  const demande = await this.prisma.demandeAdhesion.update({
-    where: { id },
-    data: {
-      statut: StatutDemande.REFUSEE,
-      ...(motif ? { motifRefus: motif } : {}),
-    },
-  });
-
-  // ✅ Notifier le frontend de retirer cette demande de la liste
-  this.gateway.notifyStatutChange({ id, statut: 'REFUSEE' });
-
-  return demande;
-}
-
-
-async updateDocumentDates(
-  demandeId: number,
-  documentId: number,
-  dto: UpdateDocumentDatesDto,
-) {
-  // 1. Vérifier que la demande existe
-  const demande = await this.prisma.demandeAdhesion.findUnique({
-    where: { id: demandeId },
-  });
-  if (!demande) {
-    throw new NotFoundException(`Demande #${demandeId} introuvable`);
+  async accepter(id: number) {
+    const demande = await this.prisma.demandeAdhesion.update({
+      where: { id },
+      data: { statut: StatutDemande.ACCEPTEE },
+    });
+    this.gateway.notifyStatutChange({ id, statut: 'ACCEPTEE' });
+    return demande;
   }
 
-  // 2. Vérifier que le document appartient à cette demande
-  const document = await this.prisma.document.findFirst({
-    where: {
-      id: documentId,
-      demandeAdhesionId: demandeId,
-    },
-  });
-  if (!document) {
-    throw new NotFoundException(
-      `Document #${documentId} introuvable dans la demande #${demandeId}`,
-    );
+  async refuser(id: number, motif?: string) {
+    const demande = await this.prisma.demandeAdhesion.update({
+      where: { id },
+      data: {
+        statut: StatutDemande.REFUSEE,
+        ...(motif ? { motifRefus: motif } : {}),
+      },
+    });
+    this.gateway.notifyStatutChange({ id, statut: 'REFUSEE' });
+    return demande;
   }
 
-  // 3. Seuls RC_PRO, RC_CIRCULATION et KBIS sont modifiables
-  const TYPES_AUTORISÉS: TypeDocument[] = [
-    TypeDocument.RC_PRO,
-    TypeDocument.RC_CIRCULATION,
-    TypeDocument.KBIS,          // ✅ AJOUTÉ
-  ];
-  if (!TYPES_AUTORISÉS.includes(document.typeDocument)) {
-    throw new BadRequestException(
-      `Seuls les documents RC_PRO, RC_CIRCULATION et KBIS peuvent être modifiés. ` +
-      `Type reçu : ${document.typeDocument}`,
-    );
+  async updateDocumentDates(
+    demandeId: number,
+    documentId: number,
+    dto: UpdateDocumentDatesDto,
+  ) {
+    const demande = await this.prisma.demandeAdhesion.findUnique({
+      where: { id: demandeId },
+    });
+    if (!demande) {
+      throw new NotFoundException(`Demande #${demandeId} introuvable`);
+    }
+
+    const document = await this.prisma.document.findFirst({
+      where: { id: documentId, demandeAdhesionId: demandeId },
+    });
+    if (!document) {
+      throw new NotFoundException(
+        `Document #${documentId} introuvable dans la demande #${demandeId}`,
+      );
+    }
+
+    const TYPES_AUTORISÉS: TypeDocument[] = [
+      TypeDocument.RC_PRO,
+      TypeDocument.RC_CIRCULATION,
+      TypeDocument.KBIS,
+    ];
+    if (!TYPES_AUTORISÉS.includes(document.typeDocument)) {
+      throw new BadRequestException(
+        `Seuls les documents RC_PRO, RC_CIRCULATION et KBIS peuvent être modifiés. ` +
+        `Type reçu : ${document.typeDocument}`,
+      );
+    }
+
+    const data: { dateDebutValidite?: Date | null; dateFinValidite?: Date | null } = {};
+
+    if (dto.dateDebutValidite !== undefined) {
+      data.dateDebutValidite = dto.dateDebutValidite
+        ? new Date(dto.dateDebutValidite)
+        : null;
+    }
+    if (dto.dateFinValidite !== undefined) {
+      data.dateFinValidite = dto.dateFinValidite
+        ? new Date(dto.dateFinValidite)
+        : null;
+    }
+
+    const debut = data.dateDebutValidite ?? document.dateDebutValidite;
+    const fin   = data.dateFinValidite   ?? document.dateFinValidite;
+    if (debut && fin && fin <= debut) {
+      throw new BadRequestException(
+        'La date de fin doit être strictement postérieure à la date de début',
+      );
+    }
+
+    const updated = await this.prisma.document.update({
+      where: { id: documentId },
+      data,
+      select: this.documentSelect,
+    });
+
+    return this.cleanDocument(updated);
   }
-
-  // 4. Construire le payload (uniquement les champs fournis)
-  const data: { dateDebutValidite?: Date | null; dateFinValidite?: Date | null } = {};
-
-  if (dto.dateDebutValidite !== undefined) {
-    data.dateDebutValidite = dto.dateDebutValidite
-      ? new Date(dto.dateDebutValidite)
-      : null;
-  }
-  if (dto.dateFinValidite !== undefined) {
-    data.dateFinValidite = dto.dateFinValidite
-      ? new Date(dto.dateFinValidite)
-      : null;
-  }
-
-  // 5. Vérification cohérence — en tenant compte des valeurs déjà en base
-  const debut = data.dateDebutValidite ?? document.dateDebutValidite;
-  const fin   = data.dateFinValidite   ?? document.dateFinValidite;
-  if (debut && fin && fin <= debut) {
-    throw new BadRequestException(
-      'La date de fin doit être strictement postérieure à la date de début',
-    );
-  }
-
-  // 6. Mise à jour en base
-  const updated = await this.prisma.document.update({
-    where: { id: documentId },
-    data,
-    select: this.documentSelect,
-  });
-
-  return this.cleanDocument(updated);
-}
 
   // ================== VÉRIFICATION TOKEN ==================
 
@@ -627,77 +626,74 @@ async updateDocumentDates(
 
   // ================== SUPPRESSION ==================
 
-async remove(id: number) {
-  // 1. Vérifier que la demande existe
-  const demande = await this.prisma.demandeAdhesion.findUnique({
-    where: { id },
-    include: {
-      documents: {
-        select: {
-          id: true,
-          fichiers: { select: { id: true, cheminFichier: true } },
+  async remove(id: number) {
+    const demande = await this.prisma.demandeAdhesion.findUnique({
+      where: { id },
+      include: {
+        documents: {
+          select: {
+            id: true,
+            fichiers: { select: { id: true, cheminFichier: true } },
+          },
         },
       },
-    },
-  });
+    });
 
-  if (!demande) {
-    throw new NotFoundException(`Demande d'adhésion #${id} introuvable`);
-  }
+    if (!demande) {
+      throw new NotFoundException(`Demande d'adhésion #${id} introuvable`);
+    }
 
-  return this.prisma.$transaction(async (tx) => {
-    // 2. Supprimer les fichiers physiques + fichiers_documents
+    // Collecter tous les storagePaths à supprimer depuis Supabase
+    const storagePaths: string[] = [];
     for (const doc of demande.documents) {
       for (const fichier of doc.fichiers) {
-        // Supprimer le fichier physique du disque
-        try {
-          const fullPath = path.join(process.cwd(), fichier.cheminFichier);
-          await fs.unlink(fullPath);
-        } catch {
-          // Fichier déjà supprimé ou introuvable → on continue
-        }
+        const storagePath = this.extractStoragePath(fichier.cheminFichier);
+        if (storagePath) storagePaths.push(storagePath);
+      }
+    }
+
+    // Supprimer les fichiers Supabase en une seule requête batch
+    if (storagePaths.length > 0) {
+      const { error } = await this.supabase.storage
+        .from(DemandeAdherentService.BUCKET)
+        .remove(storagePaths);
+
+      if (error) {
+        // Log non-bloquant : on continue même si Supabase échoue
+        console.error(`Supabase storage remove error (demande #${id}):`, error.message);
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      // Supprimer les enregistrements fichiers_documents
+      for (const doc of demande.documents) {
+        await tx.fichierDocument.deleteMany({
+          where: { documentId: doc.id },
+        });
       }
 
-      // Supprimer les enregistrements fichiers_documents
-      await tx.fichierDocument.deleteMany({
-        where: { documentId: doc.id },
+      // Supprimer les documents
+      await tx.document.deleteMany({
+        where: { demandeAdhesionId: id },
       });
-    }
 
-    // 3. Supprimer les documents
-    await tx.document.deleteMany({
-      where: { demandeAdhesionId: id },
+      // Supprimer l'adherent lié (s'il existe)
+      const adherent = await tx.adherent.findFirst({
+        where: { demandeAdhesionId: id },
+        select: { id: true },
+      });
+
+      if (adherent) {
+        await tx.$executeRaw`
+          DELETE FROM reservations_mission WHERE "adherentId" = ${adherent.id}
+        `;
+        await tx.adherent.delete({ where: { id: adherent.id } });
+      }
+
+      // Supprimer la demande elle-même
+      return tx.demandeAdhesion.delete({
+        where: { id },
+      });
     });
-
-    // 4. Supprimer l'adherent lié (s'il existe)
-    const adherent = await tx.adherent.findFirst({
-      where: { demandeAdhesionId: id },
-      select: { id: true },
-    });
-
-    if (adherent) {
-      // Supprimer les reservations_mission liées à l'adherent
-      await tx.$executeRaw`
-        DELETE FROM reservations_mission WHERE "adherentId" = ${adherent.id}
-      `;
-
-      await tx.adherent.delete({ where: { id: adherent.id } });
-    }
-
-    // 5. Supprimer le dossier physique upload
-    try {
-      const uploadDir = this.getUploadDir(id);
-      await fs.rm(uploadDir, { recursive: true, force: true });
-    } catch {
-      // Dossier inexistant → on continue
-    }
-
-    // 6. Supprimer la demande elle-même
-    return tx.demandeAdhesion.delete({
-      where: { id },
-    });
-  });
-}
-
-
+  }
 }
