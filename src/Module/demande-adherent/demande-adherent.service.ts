@@ -527,8 +527,7 @@ async accepter(id: number) {
   if (!frontendUrl) {
     console.error('❌ FRONTEND_URL non définie — email non envoyé');
   } else {
-    const profileUrl = `${frontendUrl}/formulaire/adherent/inscription-formulaire/${profileToken}`;
-
+const profileUrl = `${frontendUrl}/formulaire/adherent/profil-adherent-formulaire/${profileToken}`;
     try {
       await this.emailService.sendProfileCreationLink(
         demande.email,
