@@ -356,7 +356,7 @@ export class DemandePartenaireService {
     ).join('');
   }
 
-  async accepterDemande(id: number, dto: AccepterDemandeDto, contratFiles: FastifyFileKV[]) {
+async accepterDemande(id: number, dto: AccepterDemandeDto, contratFiles: FastifyFileKV[]) {
     const demande = await this.prisma.demandePartenaire.findUnique({
       where: { id },
       include: { rendezvous: true, contrat: true },
@@ -376,6 +376,13 @@ export class DemandePartenaireService {
       throw new BadRequestException('Un seul fichier contrat est autorisé');
     }
 
+    // ── Guard FRONTEND_URL
+    const frontendUrl = process.env.FRONTEND_URL;
+    if (!frontendUrl) {
+      console.error('❌ FRONTEND_URL non définie');
+      throw new BadRequestException('Configuration serveur manquante : FRONTEND_URL');
+    }
+
     // ── Upload contrat vers Supabase (avant la transaction Prisma)
     const { cheminDocument, nomFichier, tailleDocument } =
       await this.saveContratFile(id, contratFiles[0]);
@@ -389,7 +396,7 @@ export class DemandePartenaireService {
         data: {
           dateSignature:           new Date(dto.dateSignature),
           dateFinContrat:          new Date(dto.dateFinContrat),
-          cheminDocument,          // ✅ URL publique Supabase
+          cheminDocument,
           nomFichier,
           tailleDocument,
           notesInternes:           dto.notesInternes,
@@ -417,7 +424,7 @@ export class DemandePartenaireService {
 
     this.gateway.notifyStatutChange({ id, statut: 'ACCEPTEE' });
 
-    const profileUrl = `${process.env.FRONTEND_URL}/formulaire/partenaire/inscription-formulaire/${profileToken}?code=${codePartenaire}`;
+    const profileUrl = `${frontendUrl}/formulaire/partenaire/inscription-formulaire/${profileToken}?code=${codePartenaire}`;
 
     try {
       await this.emailService.sendAcceptationPartenaireAvecProfil({
@@ -428,7 +435,7 @@ export class DemandePartenaireService {
         dateExpiration:       profileTokenExpiry,
         dateSignatureContrat: contrat.dateSignature,
         dateFinContrat:       contrat.dateFinContrat,
-        contratPath:          contrat.cheminDocument, // ✅ URL publique Supabase
+        contratPath:          contrat.cheminDocument,
         contratName:          contrat.nomFichier,
         codePartenaire,
       });
