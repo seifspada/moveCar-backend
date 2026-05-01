@@ -81,41 +81,40 @@ async function bootstrap() {
   const isDevelopment = process.env.NODE_ENV === 'development';
 
   // ✅ CORS Fastify — Flutter Web + Next.js + Vercel
-  await app.register(fastifyCors, {
-    origin: (origin, callback) => {
-      // Autoriser sans origin (Postman, mobile natif Android/iOS)
-      if (!origin) return callback(null, true);
+ // ✅ CORS Fastify — Flutter Web + Next.js + Vercel
+await app.register(fastifyCors as any, {    // ← as any pour éviter conflit types
+  origin: (origin: string, callback: (err: Error | null, allow: boolean) => void) => {
+    if (!origin) return callback(null, true);
 
-      if (isDevelopment) return callback(null, true);
+    if (isDevelopment) return callback(null, true);
 
-      const allowedOrigins: (string | RegExp)[] = [
-        // ── Next.js Frontend ──────────────────────
-        'https://move-car-one.vercel.app',
-        /^https:\/\/move-car.*\.vercel\.app$/,
-        'http://localhost:3001',
-        'http://127.0.0.1:3001',
+    const allowedOrigins: (string | RegExp)[] = [
+      // ── Next.js Frontend ──────────────────────
+      'https://move-car-one.vercel.app',
+      /^https:\/\/move-car.*\.vercel\.app$/,
+      'http://localhost:3001',
+      'http://127.0.0.1:3001',
 
-        // ── Flutter Web (port dynamique Chrome) ───
-        /^http:\/\/localhost:\d+$/,
-        /^http:\/\/127\.0\.0\.1:\d+$/,
-      ];
+      // ── Flutter Web (port dynamique Chrome) ───
+      /^http:\/\/localhost:\d+$/,
+      /^http:\/\/127\.0\.0\.1:\d+$/,
+    ];
 
-      const allowed = allowedOrigins.some((o) =>
-        typeof o === 'string' ? o === origin : o.test(origin),
-      );
+    const allowed = allowedOrigins.some((o) =>
+      typeof o === 'string' ? o === origin : o.test(origin),
+    );
 
-      if (allowed) {
-        callback(null, true);
-      } else {
-        logger.warn(`🚫 CORS bloqué pour origin: ${origin}`);
-        callback(new Error(`CORS non autorisé pour: ${origin}`), false);
-      }
-    },
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-  });
-
+    if (allowed) {
+      callback(null, true);
+    } else {
+      logger.warn(`🚫 CORS bloqué pour origin: ${origin}`);
+      callback(new Error(`CORS non autorisé pour: ${origin}`), false);
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+});
   logger.log(
     `✅ CORS activé (mode: ${isDevelopment ? 'development - all origins' : 'production - origins restreints'})`,
   );
