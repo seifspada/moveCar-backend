@@ -99,11 +99,33 @@ type DocumentEntity {
   typeDocument: String!
 }
 
+"""Étape courante du stepper d'inspection (pour reprise après crash)"""
+enum EtapeInspection {
+  CONDITIONS
+  DOCUMENTS
+  EXTERIEUR
+  IDENTITE
+  INTERIEUR
+  TABLEAU_BORD
+  TERMINEE
+}
+
 type FichierDocumentEntity {
   cheminFichier: String!
   dateCreation: DateTime!
   dateModification: DateTime!
   id: Int!
+}
+
+"""Filtres pour lister les inspections"""
+input InspectionFilterInput {
+  adherentId: Int
+  reservationId: String
+  skip: Int = 0
+
+  """Filtrer par statut (DRAFT, IN_PROGRESS, VALIDATED, REJECTED)"""
+  statut: StatutPreTripInspection
+  take: Int = 20
 }
 
 type MissionCardType {
@@ -173,6 +195,15 @@ type Mutation {
 
   """Demander une annulation après 24h (adhérent)"""
   requestCancellation(id: String!, motifAnnulation: String!): ReservationMissionEntity!
+
+  """Démarre une inspection pré-mission (Adhérent uniquement)"""
+  startInspection(input: StartInspectionInput!): PreTripInspection!
+
+  """Soumet le consentement de l'adhérent (étape 6)"""
+  submitConsent(input: SubmitConsentInput!): PreTripInspection!
+
+  """Valide l'inspection finale et démarre la mission"""
+  validateAndStartMission(input: ValidateInspectionInput!): PreTripInspection!
 }
 
 type NotificationEntity {
@@ -189,6 +220,104 @@ type PartenaireNavbar {
   photo: String
 }
 
+"""Acceptation horodatée des conditions de mission"""
+type PreTripConsent {
+  """✅ Case obligatoire : J'accepte toutes les conditions"""
+  acceptationGlobale: Boolean!
+
+  """Apte à conduire (repos et concentration)"""
+  apteAConduire: Boolean!
+
+  """Engagement à respecter le code de la route"""
+  codeRoute: Boolean!
+
+  """Engagement à conduire de manière responsable et sécurisée"""
+  conduiteResponsable: Boolean!
+  dateAcceptation: DateTime!
+  id: ID!
+  inspectionId: String!
+  ipAdresse: String
+  latitude: Float
+  longitude: Float
+
+  """Les photos sont réelles et prises au moment de la mission"""
+  photosReelles: Boolean!
+
+  """Responsabilité en cas de comportement dangereux ou négligence"""
+  responsabiliteNegligence: Boolean!
+
+  """Acceptation de l'évaluation de la conduite via scoring"""
+  scoringConduite: Boolean!
+
+  """Acceptation du suivi GPS en temps réel durant la mission"""
+  suiviGps: Boolean!
+  userAgent: String
+
+  """Le véhicule a été vérifié avant le départ"""
+  vehiculeVerifie: Boolean!
+
+  """Version des conditions acceptées (audit légal)"""
+  versionConditions: String!
+}
+
+"""Fiche technique de début de mission (anti-fraude)"""
+type PreTripInspection {
+  """ID de l'adhérent-convoyeur"""
+  adherentId: Int!
+  consent: PreTripConsent
+  dateCreation: DateTime!
+  dateDebut: DateTime!
+  dateModification: DateTime!
+  dateValidation: DateTime
+  etapeCourante: EtapeInspection!
+  id: ID!
+  latitudeDebut: Float
+  latitudeFin: Float
+  longitudeDebut: Float
+  longitudeFin: Float
+  medias: [PreTripInspectionMedia!]
+  motifRejet: String
+
+  """Nombre de photos uploadées (sur 12 attendues)"""
+  nombreMediasUploades: Int
+
+  """Vrai si toutes les conditions sont réunies pour valider"""
+  peutEtreValidee: Boolean
+
+  """ID de la réservation associée (1-1)"""
+  reservationId: String!
+  statut: StatutPreTripInspection!
+}
+
+"""Photo individuelle d'une fiche technique avec métadonnées anti-fraude"""
+type PreTripInspectionMedia {
+  """URL signée Supabase Storage"""
+  cheminFichier: String!
+  dateModification: DateTime!
+  dateUpload: DateTime!
+
+  """Hash SHA-256 du fichier (preuve d'intégrité)"""
+  hashSha256: String!
+  id: ID!
+  inspectionId: String!
+  latitude: Float!
+  longitude: Float!
+  mimeType: String!
+
+  """Précision GPS en mètres"""
+  precisionGps: Float
+
+  """Taille en octets"""
+  tailleFichier: Int!
+
+  """Timestamp EXIF original (pas la date d'upload)"""
+  timestampPhoto: DateTime!
+  typeMedia: TypeMediaInspection!
+
+  """Vrai si les vérifications anti-fraude ont passé"""
+  validatedByServer: Boolean!
+}
+
 type Query {
   adherentMe: AdherentPublic!
   adminMe: AdminPublic!
@@ -196,10 +325,25 @@ type Query {
 
   """Récupérer toutes les réservations (admin/agent)"""
   allReservations: [ReservationMissionEntity!]!
+
+  """Récupère l'inspection d'une réservation"""
+  getInspectionByReservation(reservationId: ID!): PreTripInspection
+
+  """Détail complet d'une inspection avec médias et consentement"""
+  getInspectionDetails(inspectionId: ID!): PreTripInspection!
   getMissionById(id: String!): MissionEntity
 
   """Toutes les missions sans filtre (admin/agent)"""
   getMissionsForCardsByAgence: [MissionCardType!]!
+
+  """Liste les inspections (filtrage par rôle automatique)"""
+  listInspections(filter: InspectionFilterInput): [PreTripInspection!]!
+
+  """Inspections en cours - réservé Agent/Admin"""
+  listPendingInspections: [PreTripInspection!]!
+
+  """Inspections rejetées par anti-fraud - réservé Agent/Admin"""
+  listRejectedInspections: [PreTripInspection!]!
   missionsForCards: [MissionCardType!]!
 
   """Récupérer toutes les réservations de l'adhérent connecté"""
@@ -280,13 +424,34 @@ input SearchByTrajetInput {
   villeDepartNom: String!
 }
 
+"""Crée une nouvelle fiche technique pour une réservation"""
+input StartInspectionInput {
+  """Position GPS du convoyeur au démarrage"""
+  latitudeDebut: Float
+  longitudeDebut: Float
+
+  """ID de la réservation à inspecter"""
+  reservationId: String!
+}
+
 enum StatutMission {
   ARRIVEE
   CONFIRMEE
   EN_ATTENTE
   EN_COURS
+  PROBLEME_TRAJET
   RESERVATION_ANNULEE
   RESERVEE
+  TERMINEE
+}
+
+"""Cycle de vie de la fiche technique de début de mission"""
+enum StatutPreTripInspection {
+  COMPLETED
+  DRAFT
+  IN_PROGRESS
+  REJECTED
+  VALIDATED
 }
 
 """Statut de la réservation"""
@@ -297,6 +462,42 @@ enum StatutReservation {
   CONFIRMED_BY_ADHERENT
   EN_ATTENTE
   REFUSEE
+}
+
+"""Acceptation des conditions de mission par le convoyeur"""
+input SubmitConsentInput {
+  """Case obligatoire : J'accepte toutes les conditions"""
+  acceptationGlobale: Boolean!
+
+  """Apte à conduire (repos et concentration)"""
+  apteAConduire: Boolean!
+
+  """Engagement à respecter le code de la route"""
+  codeRoute: Boolean!
+
+  """Engagement à conduire de manière responsable"""
+  conduiteResponsable: Boolean!
+  inspectionId: String!
+  latitude: Float
+  longitude: Float
+
+  """Les photos sont réelles et prises au moment de la mission"""
+  photosReelles: Boolean!
+
+  """Responsabilité en cas de comportement dangereux"""
+  responsabiliteNegligence: Boolean!
+
+  """Acceptation du scoring de conduite"""
+  scoringConduite: Boolean!
+
+  """Acceptation du suivi GPS en temps réel"""
+  suiviGps: Boolean!
+
+  """Le véhicule a été vérifié avant le départ"""
+  vehiculeVerifie: Boolean!
+
+  """Version des conditions affichées au convoyeur (ex: "v1.0")"""
+  versionConditions: String!
 }
 
 enum TypeCarburant {
@@ -317,6 +518,22 @@ enum TypeLieu {
   HOTEL
   PARC_AUTO
   PARTICULIER
+}
+
+"""Les 12 types de photos obligatoires pour valider une fiche technique"""
+enum TypeMediaInspection {
+  EXT_COTE_DROIT
+  EXT_COTE_GAUCHE
+  EXT_FACE_ARRIERE
+  EXT_FACE_AVANT
+  INT_BANQUETTE_ARRIERE
+  INT_SIEGE_CONDUCTEUR
+  INT_SIEGE_PASSAGER
+  INT_VUE_GLOBALE
+  PERMIS_RECTO
+  PERMIS_VERSO
+  SELFIE_VEHICULE
+  TABLEAU_BORD
 }
 
 enum TypeVehicule {
@@ -340,6 +557,15 @@ type UserSimpleEntity {
   email: String!
   name: String!
   photo: String
+}
+
+"""Validation finale de la fiche et démarrage de la mission"""
+input ValidateInspectionInput {
+  inspectionId: String!
+
+  """GPS du convoyeur au moment du clic final"""
+  latitudeFin: Float
+  longitudeFin: Float
 }
 
 type VehiculeMissionEntity {

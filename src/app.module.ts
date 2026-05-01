@@ -25,6 +25,7 @@ import { DemandePartenaireModule } from './Module/demande-partenaire/demande-par
 import { AdminModule } from './Module/admin/admin.module';
 import { DocumentProcessingModule } from './Module/document-processing/document-processing.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { PreTripInspectionModule } from './Module/pretrip-inspection/pretrip-inspection.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { ServeStaticModule } from '@nestjs/serve-static';
     AgentModule,
     AdminModule,
     DocumentProcessingModule,
+    PreTripInspectionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

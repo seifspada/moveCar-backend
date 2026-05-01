@@ -75,20 +75,26 @@ async function bootstrap() {
     },
   });
 
-  // ✅ CORS — production inclut Vercel
   const isDevelopment = process.env.NODE_ENV === 'development';
 
+  // ✅ CORS — Flutter Web + Next.js + Vercel
   const allowedOrigins = isDevelopment
     ? ['*']
     : [
+        // ── Next.js Frontend ──────────────────────
         'https://move-car-one.vercel.app',
         /^https:\/\/move-car.*\.vercel\.app$/,
         'http://localhost:3001',
         'http://127.0.0.1:3001',
+
+        // ── Flutter Web (port dynamique Chrome) ───
+        /^http:\/\/localhost:\d+$/,
+        /^http:\/\/127\.0\.0\.1:\d+$/,
       ];
 
   app.enableCors({
     origin: (origin, callback) => {
+      // Autoriser sans origin (Postman, mobile natif Android/iOS)
       if (!origin) return callback(null, true);
 
       if (isDevelopment) return callback(null, true);
