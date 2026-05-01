@@ -1,9 +1,12 @@
+// main.ts complet corrigé
+
 import 'dotenv/config';
 
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import fastifyCors from '@fastify/cors';          // ← ajouter cet import
 
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -77,10 +80,15 @@ async function bootstrap() {
 
   const isDevelopment = process.env.NODE_ENV === 'development';
 
-  // ✅ CORS — Flutter Web + Next.js + Vercel
-  const allowedOrigins = isDevelopment
-    ? ['*']
-    : [
+  // ✅ CORS Fastify — Flutter Web + Next.js + Vercel
+  await app.register(fastifyCors, {
+    origin: (origin, callback) => {
+      // Autoriser sans origin (Postman, mobile natif Android/iOS)
+      if (!origin) return callback(null, true);
+
+      if (isDevelopment) return callback(null, true);
+
+      const allowedOrigins: (string | RegExp)[] = [
         // ── Next.js Frontend ──────────────────────
         'https://move-car-one.vercel.app',
         /^https:\/\/move-car.*\.vercel\.app$/,
@@ -91,13 +99,6 @@ async function bootstrap() {
         /^http:\/\/localhost:\d+$/,
         /^http:\/\/127\.0\.0\.1:\d+$/,
       ];
-
-  app.enableCors({
-    origin: (origin, callback) => {
-      // Autoriser sans origin (Postman, mobile natif Android/iOS)
-      if (!origin) return callback(null, true);
-
-      if (isDevelopment) return callback(null, true);
 
       const allowed = allowedOrigins.some((o) =>
         typeof o === 'string' ? o === origin : o.test(origin),
@@ -112,18 +113,11 @@ async function bootstrap() {
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'X-Requested-With',
-      'Accept',
-    ],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   });
 
   logger.log(
-    `✅ CORS activé (mode: ${
-      isDevelopment ? 'development - all origins' : 'production - origins restreints'
-    })`,
+    `✅ CORS activé (mode: ${isDevelopment ? 'development - all origins' : 'production - origins restreints'})`,
   );
 
   // ✅ Validation globale
@@ -179,7 +173,7 @@ async function bootstrap() {
     },
   });
 
-  const port = Number(process.env.PORT) || 3000;
+  const port = Number(process.env.PORT) || 10000;  // ← 10000 = port Render par défaut
   await app.listen(port, '0.0.0.0');
 
   logger.log('========================================');
