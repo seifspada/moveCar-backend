@@ -6,7 +6,7 @@ import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import fastifyCors from '@fastify/cors';          // ← ajouter cet import
+import * as fastifyCors from '@fastify/cors';          // ← ajouter cet import
 
 import { join } from 'path';
 import { existsSync } from 'fs';
