@@ -183,19 +183,27 @@ export class ReservationsMissionService {
     return { success: false, message: "Votre compte n'est pas autorisé à réserver des missions", code: 'ADHERENT_NOT_AUTHORIZED' };
   }
 
-  if (mission.disponibilite) {
-    const dateDepartInput    = new Date(dateDepart);
-    const disponibiliteDebut = new Date(mission.disponibilite.dateDebut);
-    const disponibiliteFin   = new Date(mission.disponibilite.dateDepartMax || mission.disponibilite.dateFin);
+ if (mission.disponibilite) {
+  // ✅ Normaliser toutes les dates à minuit UTC pour comparer UNIQUEMENT les jours
+  const normalizeToDay = (d: Date | string): number => {
+    const date = new Date(d);
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  };
 
-    if (dateDepartInput < disponibiliteDebut || dateDepartInput > disponibiliteFin) {
-      return {
-        success: false,
-        message: `La date de départ doit être entre le ${disponibiliteDebut.toLocaleDateString('fr-FR')} et le ${disponibiliteFin.toLocaleDateString('fr-FR')}`,
-        code: 'INVALID_DEPARTURE_DATE',
-      };
-    }
+  const dateDepartMs    = normalizeToDay(dateDepart);
+  const disponibiliteDebutMs = normalizeToDay(mission.disponibilite.dateDebut);
+  const disponibiliteFinMs   = normalizeToDay(
+    mission.disponibilite.dateDepartMax || mission.disponibilite.dateFin
+  );
+
+  if (dateDepartMs < disponibiliteDebutMs || dateDepartMs > disponibiliteFinMs) {
+    return {
+      success: false,
+      message: `La date de départ doit être entre le ${new Date(disponibiliteDebutMs).toLocaleDateString('fr-FR', { timeZone: 'UTC' })} et le ${new Date(disponibiliteFinMs).toLocaleDateString('fr-FR', { timeZone: 'UTC' })}`,
+      code: 'INVALID_DEPARTURE_DATE',
+    };
   }
+}
 
   // ─── Vérifier réservation active existante ───────────────────────────────
   const statutsActifs: StatutReservation[] = [
