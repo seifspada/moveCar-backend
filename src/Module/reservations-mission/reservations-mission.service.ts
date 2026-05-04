@@ -48,7 +48,8 @@ export class ReservationsMissionService {
     return `RES-${year}-${unique}`;
   }
 
-  private get reservationInclude() {
+  // ✅ PUBLIC pour que le resolver puisse l'utiliser dans getReservationsByMissionForAdherent
+  get reservationInclude() {
     return {
       adherent: {
         select: {
@@ -152,155 +153,155 @@ export class ReservationsMissionService {
    * ✅ Créer une réservation (adhérent)
    */
   async createReservation(
-  adherentId: number,
-  createReservationInput: CreateReservationInput,
-): Promise<{
-  success: boolean;
-  message: string;
-  code?: string;
-  reservation?: any;
-}> {
-  const { missionId, dateDepart, heureDepart } = createReservationInput;
+    adherentId: number,
+    createReservationInput: CreateReservationInput,
+  ): Promise<{
+    success: boolean;
+    message: string;
+    code?: string;
+    reservation?: any;
+  }> {
+    const { missionId, dateDepart, heureDepart } = createReservationInput;
 
-  const mission = await this.prisma.mission.findUnique({
-    where: { id: missionId },
-    include: {
-      calculs: true,
-      disponibilite: true,
-      agent: true,
-      vehicule: true,
-      adresseDepart: true,
-      adresseArrivee: true,
-    },
-  });
+    const mission = await this.prisma.mission.findUnique({
+      where: { id: missionId },
+      include: {
+        calculs: true,
+        disponibilite: true,
+        agent: true,
+        vehicule: true,
+        adresseDepart: true,
+        adresseArrivee: true,
+      },
+    });
 
-  if (!mission) return { success: false, message: `Mission ${missionId} introuvable`, code: 'MISSION_NOT_FOUND' };
-  if (mission.statut !== 'EN_ATTENTE') return { success: false, message: "Cette mission n'est plus disponible", code: 'MISSION_NOT_AVAILABLE' };
+    if (!mission)
+      return { success: false, message: `Mission ${missionId} introuvable`, code: 'MISSION_NOT_FOUND' };
 
-  const adherent = await this.prisma.adherent.findUnique({ where: { id: adherentId } });
-  if (!adherent) return { success: false, message: `Adhérent ${adherentId} introuvable`, code: 'ADHERENT_NOT_FOUND' };
-  if (adherent.statut !== 'ACTIF' || adherent.estBloque) {
-    return { success: false, message: "Votre compte n'est pas autorisé à réserver des missions", code: 'ADHERENT_NOT_AUTHORIZED' };
-  }
+    if (mission.statut !== 'EN_ATTENTE')
+      return { success: false, message: "Cette mission n'est plus disponible", code: 'MISSION_NOT_AVAILABLE' };
 
- if (mission.disponibilite) {
-  // ✅ Normaliser toutes les dates à minuit UTC pour comparer UNIQUEMENT les jours
-  const normalizeToDay = (d: Date | string): number => {
-    const date = new Date(d);
-    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-  };
+    const adherent = await this.prisma.adherent.findUnique({ where: { id: adherentId } });
+    if (!adherent)
+      return { success: false, message: `Adhérent ${adherentId} introuvable`, code: 'ADHERENT_NOT_FOUND' };
 
-  const dateDepartMs    = normalizeToDay(dateDepart);
-  const disponibiliteDebutMs = normalizeToDay(mission.disponibilite.dateDebut);
-  const disponibiliteFinMs   = normalizeToDay(
-    mission.disponibilite.dateDepartMax || mission.disponibilite.dateFin
-  );
+    if (adherent.statut !== 'ACTIF' || adherent.estBloque) {
+      return {
+        success: false,
+        message: "Votre compte n'est pas autorisé à réserver des missions",
+        code: 'ADHERENT_NOT_AUTHORIZED',
+      };
+    }
 
-  if (dateDepartMs < disponibiliteDebutMs || dateDepartMs > disponibiliteFinMs) {
-    return {
-      success: false,
-      message: `La date de départ doit être entre le ${new Date(disponibiliteDebutMs).toLocaleDateString('fr-FR', { timeZone: 'UTC' })} et le ${new Date(disponibiliteFinMs).toLocaleDateString('fr-FR', { timeZone: 'UTC' })}`,
-      code: 'INVALID_DEPARTURE_DATE',
-    };
-  }
-}
+    // ✅ Comparaison par jour uniquement (fix timezone)
+    if (mission.disponibilite) {
+      const normalizeToDay = (d: Date | string): number => {
+        const date = new Date(d);
+        return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+      };
 
-  // ─── Vérifier réservation active existante ───────────────────────────────
-  const statutsActifs: StatutReservation[] = [
-    StatutReservation.EN_ATTENTE,
-    StatutReservation.ACCEPTED_BY_AGENT,
-    StatutReservation.CONFIRMED_BY_ADHERENT,
-    StatutReservation.ANNULATION_DEMANDEE,
-  ];
+      const dateDepartMs = normalizeToDay(dateDepart);
+      const disponibiliteDebutMs = normalizeToDay(mission.disponibilite.dateDebut);
+      const disponibiliteFinMs = normalizeToDay(
+        mission.disponibilite.dateDepartMax || mission.disponibilite.dateFin,
+      );
 
-  const activeReservation = await this.prisma.reservationMission.findFirst({
-    where: { missionId, adherentId, statut: { in: statutsActifs } },
-  });
+      if (dateDepartMs < disponibiliteDebutMs || dateDepartMs > disponibiliteFinMs) {
+        return {
+          success: false,
+          message: `La date de départ doit être entre le ${new Date(disponibiliteDebutMs).toLocaleDateString('fr-FR', { timeZone: 'UTC' })} et le ${new Date(disponibiliteFinMs).toLocaleDateString('fr-FR', { timeZone: 'UTC' })}`,
+          code: 'INVALID_DEPARTURE_DATE',
+        };
+      }
+    }
 
-  if (activeReservation) {
-    return {
-      success: false,
-      message: 'Vous avez déjà une réservation active pour cette mission',
-      code: 'RESERVATION_ALREADY_EXISTS',
-      reservation: activeReservation,
-    };
-  }
+    // ─── Vérifier réservation active existante ───────────────────────────────
+    const statutsActifs: StatutReservation[] = [
+      StatutReservation.EN_ATTENTE,
+      StatutReservation.ACCEPTED_BY_AGENT,
+      StatutReservation.CONFIRMED_BY_ADHERENT,
+      StatutReservation.ANNULATION_DEMANDEE,
+    ];
 
-  // ✅ FIX — Réactiver une ancienne réservation ANNULEE ou REFUSEE
-  // plutôt que d'en créer une nouvelle (évite les doublons côté agent)
-  const statutsReactivables: StatutReservation[] = [
-    StatutReservation.ANNULEE,
-    StatutReservation.REFUSEE,
-  ];
+    const activeReservation = await this.prisma.reservationMission.findFirst({
+      where: { missionId, adherentId, statut: { in: statutsActifs } },
+    });
 
-  const existingCancelledReservation = await this.prisma.reservationMission.findFirst({
-    where: { missionId, adherentId, statut: { in: statutsReactivables } },
-    orderBy: { dateCreation: 'desc' }, // prendre la plus récente
-  });
+    if (activeReservation) {
+      return {
+        success: false,
+        message: 'Vous avez déjà une réservation active pour cette mission',
+        code: 'RESERVATION_ALREADY_EXISTS',
+        reservation: activeReservation,
+      };
+    }
 
-  const distanceKm = Number(mission.calculs?.distanceKm || 0);
-  const { dateArrivee, heureArrivee, dureeEstimee } =
-    this.calculateArrivalDateTime(dateDepart, heureDepart, distanceKm);
+    // ✅ Réactiver une ancienne réservation ANNULEE ou REFUSEE
+    const statutsReactivables: StatutReservation[] = [
+      StatutReservation.ANNULEE,
+      StatutReservation.REFUSEE,
+    ];
 
-  // ✅ Réactivation — on remet à zéro tous les champs liés à l'ancien cycle
-  if (existingCancelledReservation) {
-    const reactivated = await this.prisma.reservationMission.update({
-      where: { id: existingCancelledReservation.id },
+    const existingCancelledReservation = await this.prisma.reservationMission.findFirst({
+      where: { missionId, adherentId, statut: { in: statutsReactivables } },
+      orderBy: { dateCreation: 'desc' },
+    });
+
+    const distanceKm = Number(mission.calculs?.distanceKm || 0);
+    const { dateArrivee, heureArrivee, dureeEstimee } =
+      this.calculateArrivalDateTime(dateDepart, heureDepart, distanceKm);
+
+    if (existingCancelledReservation) {
+      const reactivated = await this.prisma.reservationMission.update({
+        where: { id: existingCancelledReservation.id },
+        data: {
+          statut: StatutReservation.EN_ATTENTE,
+          dateDepart: new Date(dateDepart),
+          heureDepart,
+          dateArrivee,
+          heureArrivee,
+          dureeEstimee,
+          montantTotal: Number(mission.calculs?.montantTotal || 0),
+          fraisPeage: Number(mission.calculs?.fraisPeage || 0),
+          distanceKm: Number(mission.calculs?.distanceKm || 0),
+          motifAnnulation: null,
+          motifRefus: null,
+          annulePar: null,
+          dateAnnulation: null,
+          dateRefus: null,
+          dateAcceptationAgent: null,
+          dateConfirmationAdherent: null,
+          statutPrecedent: null,
+        },
+        include: this.reservationInclude,
+      });
+      this.logger.log(`🔄 Réservation réactivée: ${reactivated.numeroReservation}`);
+      return { success: true, message: 'Réservation réactivée avec succès', reservation: reactivated };
+    }
+
+    // ─── Création normale ─────────────────────────────────────────────────
+    const numeroReservation = this.generateNumeroReservation();
+    const reservation = await this.prisma.reservationMission.create({
       data: {
-        statut:                   StatutReservation.EN_ATTENTE,
-        dateDepart:               new Date(dateDepart),
+        missionId,
+        adherentId,
+        statut: StatutReservation.EN_ATTENTE,
+        numeroReservation,
+        dateDepart: new Date(dateDepart),
         heureDepart,
         dateArrivee,
         heureArrivee,
         dureeEstimee,
-        montantTotal:             Number(mission.calculs?.montantTotal || 0),
-        fraisPeage:               Number(mission.calculs?.fraisPeage || 0),
-        distanceKm:               Number(mission.calculs?.distanceKm || 0),
-        // ─── Reset cycle précédent ───
-        motifAnnulation:          null,
-        motifRefus:               null,
-        annulePar:                null,
-        dateAnnulation:           null,
-        dateRefus:                null,
-        dateAcceptationAgent:     null,
-        dateConfirmationAdherent: null,
-        statutPrecedent:          null,
+        montantTotal: Number(mission.calculs?.montantTotal || 0),
+        fraisPeage: Number(mission.calculs?.fraisPeage || 0),
+        distanceKm: Number(mission.calculs?.distanceKm || 0),
       },
       include: this.reservationInclude,
     });
 
-    this.logger.log(`🔄 Réservation réactivée: ${reactivated.numeroReservation}`);
-    return {
-      success: true,
-      message: 'Réservation réactivée avec succès',
-      reservation: reactivated,
-    };
+    this.logger.log(`✅ Réservation créée: ${numeroReservation}`);
+    return { success: true, message: 'Réservation créée avec succès', reservation };
   }
-
-  // ─── Création normale (aucun historique) ─────────────────────────────────
-  const numeroReservation = this.generateNumeroReservation();
-
-  const reservation = await this.prisma.reservationMission.create({
-    data: {
-      missionId,
-      adherentId,
-      statut:          StatutReservation.EN_ATTENTE,
-      numeroReservation,
-      dateDepart:      new Date(dateDepart),
-      heureDepart,
-      dateArrivee,
-      heureArrivee,
-      dureeEstimee,
-      montantTotal:    Number(mission.calculs?.montantTotal || 0),
-      fraisPeage:      Number(mission.calculs?.fraisPeage || 0),
-      distanceKm:      Number(mission.calculs?.distanceKm || 0),
-    },
-    include: this.reservationInclude,
-  });
-
-  this.logger.log(`✅ Réservation créée: ${numeroReservation}`);
-  return { success: true, message: 'Réservation créée avec succès', reservation };
-}
 
   /**
    * ✅ ÉTAPE 1 — Agent accepte (EN_ATTENTE → ACCEPTED_BY_AGENT)
@@ -310,32 +311,17 @@ export class ReservationsMissionService {
       where: { id },
       include: { mission: true },
     });
-
-    if (!reservation) {
-      throw new NotFoundException(`Réservation ${id} introuvable`);
-    }
-
-    if (reservation.mission.agentId !== agentId) {
-      throw new BadRequestException(
-        'Vous ne pouvez pas accepter cette réservation',
-      );
-    }
-
-    if (reservation.statut !== StatutReservation.EN_ATTENTE) {
-      throw new BadRequestException(
-        'Cette réservation ne peut plus être acceptée',
-      );
-    }
+    if (!reservation) throw new NotFoundException(`Réservation ${id} introuvable`);
+    if (reservation.mission.agentId !== agentId)
+      throw new BadRequestException('Vous ne pouvez pas accepter cette réservation');
+    if (reservation.statut !== StatutReservation.EN_ATTENTE)
+      throw new BadRequestException('Cette réservation ne peut plus être acceptée');
 
     const updated = await this.prisma.reservationMission.update({
       where: { id },
-      data: {
-        statut: StatutReservation.ACCEPTED_BY_AGENT,
-        dateAcceptationAgent: new Date(),
-      },
+      data: { statut: StatutReservation.ACCEPTED_BY_AGENT, dateAcceptationAgent: new Date() },
       include: this.reservationInclude,
     });
-
     this.logger.log(`✅ Réservation acceptée par agent: ${reservation.numeroReservation}`);
     return updated;
   }
@@ -344,35 +330,18 @@ export class ReservationsMissionService {
    * ✅ ÉTAPE 2 — Adhérent confirme (ACCEPTED_BY_AGENT → CONFIRMED_BY_ADHERENT)
    */
   async confirmReservationByAdherent(id: string, adherentId: number) {
-    const reservation = await this.prisma.reservationMission.findUnique({
-      where: { id },
-    });
-
-    if (!reservation) {
-      throw new NotFoundException(`Réservation ${id} introuvable`);
-    }
-
-    if (reservation.adherentId !== adherentId) {
-      throw new BadRequestException(
-        'Vous ne pouvez pas confirmer cette réservation',
-      );
-    }
-
-    if (reservation.statut !== StatutReservation.ACCEPTED_BY_AGENT) {
-      throw new BadRequestException(
-        "La réservation doit être acceptée par l'agent avant confirmation",
-      );
-    }
+    const reservation = await this.prisma.reservationMission.findUnique({ where: { id } });
+    if (!reservation) throw new NotFoundException(`Réservation ${id} introuvable`);
+    if (reservation.adherentId !== adherentId)
+      throw new BadRequestException('Vous ne pouvez pas confirmer cette réservation');
+    if (reservation.statut !== StatutReservation.ACCEPTED_BY_AGENT)
+      throw new BadRequestException("La réservation doit être acceptée par l'agent avant confirmation");
 
     const updated = await this.prisma.reservationMission.update({
       where: { id },
-      data: {
-        statut: StatutReservation.CONFIRMED_BY_ADHERENT,
-        dateConfirmationAdherent: new Date(),
-      },
+      data: { statut: StatutReservation.CONFIRMED_BY_ADHERENT, dateConfirmationAdherent: new Date() },
       include: this.reservationInclude,
     });
-
     this.logger.log(`✅ Réservation confirmée par adhérent: ${reservation.numeroReservation}`);
     return updated;
   }
@@ -380,28 +349,14 @@ export class ReservationsMissionService {
   /**
    * ✅ Annulation directe — uniquement dans les 24h (adhérent)
    */
-  async cancelReservation(
-    id: string,
-    adherentId: number,
-    motifAnnulation?: string,
-  ) {
+  async cancelReservation(id: string, adherentId: number, motifAnnulation?: string) {
     const reservation = await this.prisma.reservationMission.findUnique({
       where: { id },
-      include: {
-        mission: true,
-        adherent: { include: { user: true } },
-      },
+      include: { mission: true, adherent: { include: { user: true } } },
     });
-
-    if (!reservation) {
-      throw new NotFoundException(`Réservation ${id} introuvable`);
-    }
-
-    if (reservation.adherentId !== adherentId) {
-      throw new BadRequestException(
-        'Vous ne pouvez pas annuler cette réservation',
-      );
-    }
+    if (!reservation) throw new NotFoundException(`Réservation ${id} introuvable`);
+    if (reservation.adherentId !== adherentId)
+      throw new BadRequestException('Vous ne pouvez pas annuler cette réservation');
 
     this.checkAnnulationDelais(reservation);
 
@@ -419,7 +374,6 @@ export class ReservationsMissionService {
       },
       include: this.reservationInclude,
     });
-
     this.logger.log(`❌ Réservation annulée: ${reservation.numeroReservation}`);
     return updated;
   }
@@ -427,52 +381,30 @@ export class ReservationsMissionService {
   /**
    * ✅ Demande d'annulation après 24h (adhérent)
    */
-  async requestCancellation(
-    id: string,
-    adherentId: number,
-    motifAnnulation: string,
-  ) {
-    const reservation = await this.prisma.reservationMission.findUnique({
-      where: { id },
-    });
-
-    if (!reservation) {
-      throw new NotFoundException(`Réservation ${id} introuvable`);
-    }
-
-    if (reservation.adherentId !== adherentId) {
-      throw new BadRequestException('Accès refusé');
-    }
-
-    if (reservation.statut === StatutReservation.ANNULATION_DEMANDEE) {
+  async requestCancellation(id: string, adherentId: number, motifAnnulation: string) {
+    const reservation = await this.prisma.reservationMission.findUnique({ where: { id } });
+    if (!reservation) throw new NotFoundException(`Réservation ${id} introuvable`);
+    if (reservation.adherentId !== adherentId) throw new BadRequestException('Accès refusé');
+    if (reservation.statut === StatutReservation.ANNULATION_DEMANDEE)
       throw new BadRequestException("Une demande d'annulation est déjà en cours");
-    }
 
-    // ✅ FIX: type explicite StatutReservation[] pour éviter l'erreur TS2345
     const statutsAutorisés: StatutReservation[] = [
       StatutReservation.EN_ATTENTE,
       StatutReservation.ACCEPTED_BY_AGENT,
       StatutReservation.CONFIRMED_BY_ADHERENT,
     ];
-
-    if (!statutsAutorisés.includes(reservation.statut)) {
-      throw new BadRequestException(
-        'Annulation impossible pour ce statut',
-      );
-    }
+    if (!statutsAutorisés.includes(reservation.statut))
+      throw new BadRequestException('Annulation impossible pour ce statut');
 
     const now = new Date();
     const dateDepart = new Date(
       `${reservation.dateDepart.toISOString().split('T')[0]}T${reservation.heureDepart}:00`,
     );
-    const diffAvantMission =
-      (dateDepart.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-    if (diffAvantMission < DELAI_BLOCAGE_AVANT_MISSION_HEURES) {
+    const diffAvantMission = (dateDepart.getTime() - now.getTime()) / (1000 * 60 * 60);
+    if (diffAvantMission < DELAI_BLOCAGE_AVANT_MISSION_HEURES)
       throw new BadRequestException(
         `Demande impossible : la mission démarre dans moins d'${DELAI_BLOCAGE_AVANT_MISSION_HEURES}h`,
       );
-    }
 
     const updated = await this.prisma.reservationMission.update({
       where: { id },
@@ -483,7 +415,6 @@ export class ReservationsMissionService {
       },
       include: this.reservationInclude,
     });
-
     this.logger.log(`⚠️ Demande annulation: ${reservation.numeroReservation}`);
     return updated;
   }
@@ -494,23 +425,12 @@ export class ReservationsMissionService {
   async acceptCancellationRequest(id: string, agentId: number) {
     const reservation = await this.prisma.reservationMission.findUnique({
       where: { id },
-      include: {
-        mission: true,
-        adherent: { include: { user: true } },
-      },
+      include: { mission: true, adherent: { include: { user: true } } },
     });
-
-    if (!reservation) {
-      throw new NotFoundException(`Réservation ${id} introuvable`);
-    }
-
-    if (reservation.mission.agentId !== agentId) {
-      throw new BadRequestException('Accès refusé');
-    }
-
-    if (reservation.statut !== StatutReservation.ANNULATION_DEMANDEE) {
+    if (!reservation) throw new NotFoundException(`Réservation ${id} introuvable`);
+    if (reservation.mission.agentId !== agentId) throw new BadRequestException('Accès refusé');
+    if (reservation.statut !== StatutReservation.ANNULATION_DEMANDEE)
       throw new BadRequestException("Aucune demande d'annulation en cours");
-    }
 
     if (reservation.adherent.user?.id) {
       await this.checkAndIncrementAnnulationCount(reservation.adherent.user.id);
@@ -526,7 +446,6 @@ export class ReservationsMissionService {
       },
       include: this.reservationInclude,
     });
-
     this.logger.log(`✅ Demande annulation acceptée: ${reservation.numeroReservation}`);
     return updated;
   }
@@ -534,31 +453,17 @@ export class ReservationsMissionService {
   /**
    * ✅ Agent refuse la demande d'annulation → retour statut précédent
    */
-  async refuseCancellationRequest(
-    id: string,
-    agentId: number,
-    motifRefus: string,
-  ) {
+  async refuseCancellationRequest(id: string, agentId: number, motifRefus: string) {
     const reservation = await this.prisma.reservationMission.findUnique({
       where: { id },
       include: { mission: true },
     });
-
-    if (!reservation) {
-      throw new NotFoundException(`Réservation ${id} introuvable`);
-    }
-
-    if (reservation.mission.agentId !== agentId) {
-      throw new BadRequestException('Accès refusé');
-    }
-
-    if (reservation.statut !== StatutReservation.ANNULATION_DEMANDEE) {
+    if (!reservation) throw new NotFoundException(`Réservation ${id} introuvable`);
+    if (reservation.mission.agentId !== agentId) throw new BadRequestException('Accès refusé');
+    if (reservation.statut !== StatutReservation.ANNULATION_DEMANDEE)
       throw new BadRequestException("Aucune demande d'annulation en cours");
-    }
-
-    if (!reservation.statutPrecedent) {
+    if (!reservation.statutPrecedent)
       throw new BadRequestException('Statut précédent introuvable');
-    }
 
     const updated = await this.prisma.reservationMission.update({
       where: { id },
@@ -570,7 +475,6 @@ export class ReservationsMissionService {
       },
       include: this.reservationInclude,
     });
-
     this.logger.log(`❌ Demande annulation refusée: ${reservation.numeroReservation}`);
     return updated;
   }
@@ -582,45 +486,24 @@ export class ReservationsMissionService {
     const reservation = await this.prisma.reservationMission.findUnique({
       where: { id },
       include: {
-        mission: {
-          include: {
-            adresseDepart: true,
-            adresseArrivee: true,
-          },
-        },
+        mission: { include: { adresseDepart: true, adresseArrivee: true } },
         adherent: { include: { user: true } },
       },
     });
-
-    if (!reservation) {
-      throw new NotFoundException(`Réservation ${id} introuvable`);
-    }
-
-    if (reservation.mission.agentId !== agentId) {
-      throw new BadRequestException(
-        'Vous ne pouvez pas refuser cette réservation',
-      );
-    }
-
-    if (reservation.statut !== StatutReservation.EN_ATTENTE) {
-      throw new BadRequestException(
-        'Cette réservation ne peut plus être refusée',
-      );
-    }
+    if (!reservation) throw new NotFoundException(`Réservation ${id} introuvable`);
+    if (reservation.mission.agentId !== agentId)
+      throw new BadRequestException('Vous ne pouvez pas refuser cette réservation');
+    if (reservation.statut !== StatutReservation.EN_ATTENTE)
+      throw new BadRequestException('Cette réservation ne peut plus être refusée');
 
     const updated = await this.prisma.reservationMission.update({
       where: { id },
-      data: {
-        statut: StatutReservation.REFUSEE,
-        dateRefus: new Date(),
-        motifRefus,
-      },
+      data: { statut: StatutReservation.REFUSEE, dateRefus: new Date(), motifRefus },
       include: this.reservationInclude,
     });
 
     const adherent = reservation.adherent;
     const user = adherent?.user;
-
     if (user?.email) {
       await this.emailService.sendRefusReservation({
         email: user.email,
@@ -653,11 +536,7 @@ export class ReservationsMissionService {
       where: { id },
       include: this.reservationInclude,
     });
-
-    if (!reservation) {
-      throw new NotFoundException(`Réservation ${id} introuvable`);
-    }
-
+    if (!reservation) throw new NotFoundException(`Réservation ${id} introuvable`);
     return reservation;
   }
 
@@ -668,78 +547,72 @@ export class ReservationsMissionService {
     });
   }
 
-async getReservationsByMission(missionId: string) {
-  const mission = await this.prisma.mission.findUnique({
-    where: { id: missionId },
-  });
+  /**
+   * ✅ Toutes les réservations d'une mission (agent/admin)
+   */
+  async getReservationsByMission(missionId: string) {
+    const mission = await this.prisma.mission.findUnique({ where: { id: missionId } });
+    if (!mission) throw new NotFoundException(`Mission ${missionId} introuvable`);
 
-  if (!mission) {
-    throw new NotFoundException(`Mission ${missionId} introuvable`);
+    return this.prisma.reservationMission.findMany({
+      where: { missionId },
+      include: this.reservationInclude,
+      orderBy: { dateCreation: 'desc' },
+    });
   }
 
-  // ✅ FIX: supprimer le filtre statut — retourner TOUS les statuts
-  return this.prisma.reservationMission.findMany({
-    where: { missionId },
-    include: this.reservationInclude,
-    orderBy: { dateCreation: 'desc' },
-  });
-}
+  /**
+   * ✅ NOUVEAU — Réservations d'une mission filtrées par adhérent (adhérent)
+   */
+  async getReservationsByMissionForAdherent(missionId: string, adherentId: number) {
+    const mission = await this.prisma.mission.findUnique({ where: { id: missionId } });
+    if (!mission) throw new NotFoundException(`Mission ${missionId} introuvable`);
 
-/**
- * ✅ Annulation libre — EN_ATTENTE seulement (agent n'a pas répondu)
- * Pas de délai, pas de motif requis
- */
-async cancelPendingReservation(id: string, adherentId: number) {
-  const reservation = await this.prisma.reservationMission.findUnique({
-    where: { id },
-    include: {
-      adherent: { include: { user: true } },
-    },
-  });
-
-  if (!reservation) {
-    throw new NotFoundException(`Réservation ${id} introuvable`);
+    return this.prisma.reservationMission.findMany({
+      where: { missionId, adherentId },
+      include: this.reservationInclude,
+      orderBy: { dateCreation: 'desc' },
+    });
   }
 
-  if (reservation.adherentId !== adherentId) {
-    throw new BadRequestException('Accès refusé');
-  }
+  /**
+   * ✅ Annulation libre — EN_ATTENTE seulement (agent n'a pas répondu)
+   */
+  async cancelPendingReservation(id: string, adherentId: number) {
+    const reservation = await this.prisma.reservationMission.findUnique({
+      where: { id },
+      include: { adherent: { include: { user: true } } },
+    });
+    if (!reservation) throw new NotFoundException(`Réservation ${id} introuvable`);
+    if (reservation.adherentId !== adherentId) throw new BadRequestException('Accès refusé');
+    if (reservation.statut !== StatutReservation.EN_ATTENTE)
+      throw new BadRequestException(
+        'Cette annulation rapide est uniquement disponible pour les réservations en attente de réponse',
+      );
 
-  // ✅ Uniquement si l'agent n'a pas encore répondu
-  if (reservation.statut !== StatutReservation.EN_ATTENTE) {
-    throw new BadRequestException(
-      'Cette annulation rapide est uniquement disponible pour les réservations en attente de réponse',
+    const now = new Date();
+    const dateDepart = new Date(
+      `${reservation.dateDepart.toISOString().split('T')[0]}T${reservation.heureDepart}:00`,
     );
-  }
+    const diffAvantMission = (dateDepart.getTime() - now.getTime()) / (1000 * 60 * 60);
+    if (diffAvantMission < DELAI_BLOCAGE_AVANT_MISSION_HEURES)
+      throw new BadRequestException(
+        `Annulation impossible : la mission démarre dans moins d'${DELAI_BLOCAGE_AVANT_MISSION_HEURES}h`,
+      );
 
-  const now = new Date();
-  const dateDepart = new Date(
-    `${reservation.dateDepart.toISOString().split('T')[0]}T${reservation.heureDepart}:00`,
-  );
-  const diffAvantMission =
-    (dateDepart.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-  if (diffAvantMission < DELAI_BLOCAGE_AVANT_MISSION_HEURES) {
-    throw new BadRequestException(
-      `Annulation impossible : la mission démarre dans moins d'${DELAI_BLOCAGE_AVANT_MISSION_HEURES}h`,
+    const updated = await this.prisma.reservationMission.update({
+      where: { id },
+      data: {
+        statut: StatutReservation.ANNULEE,
+        dateAnnulation: new Date(),
+        motifAnnulation: "Annulée par l'adhérent — agent non répondant",
+        annulePar: 'ADHERENT',
+      },
+      include: this.reservationInclude,
+    });
+    this.logger.log(
+      `🚫 Réservation EN_ATTENTE annulée (agent non répondant): ${reservation.numeroReservation}`,
     );
+    return updated;
   }
-
-  // ✅ Pas de compteur d'annulations — c'est la faute de l'agent
-  const updated = await this.prisma.reservationMission.update({
-    where: { id },
-    data: {
-      statut: StatutReservation.ANNULEE,
-      dateAnnulation: new Date(),
-      motifAnnulation: "Annulée par l'adhérent — agent non répondant",
-      annulePar: 'ADHERENT',
-    },
-    include: this.reservationInclude,
-  });
-
-  this.logger.log(
-    `🚫 Réservation EN_ATTENTE annulée (agent non répondant): ${reservation.numeroReservation}`,
-  );
-  return updated;
-}
 }
