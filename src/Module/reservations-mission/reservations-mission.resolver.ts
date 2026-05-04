@@ -22,12 +22,17 @@ export class ReservationsMissionResolver {
   // PRIVATE HELPERS
   // ─────────────────────────────────────────────
 
-  private getUserId(user: any): number {
-    if (!user || (!user.id && !user.sub)) {
-      throw new BadRequestException('Utilisateur non authentifié');
-    }
-    return user.id || user.sub;
+ private getUserId(user: any): number {
+  if (!user || (!user.id && !user.sub)) {
+    throw new BadRequestException('Utilisateur non authentifié');
   }
+  const rawId = user.id || user.sub;
+  const userId = Number(rawId); // ✅ forcer en number
+  if (isNaN(userId)) {
+    throw new BadRequestException('ID utilisateur invalide');
+  }
+  return userId;
+}
 
   private async resolveRoles(userId: number) {
     const [adherent, agent, admin] = await Promise.all([
