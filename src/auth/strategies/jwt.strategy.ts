@@ -32,7 +32,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         sub: admin.id,
         email: admin.email,
         roleId: null,
-        role: 'admin',
+        role: 'ADMIN',
         adherentId: null,
         partenaireId: null,
         agentId: null,
@@ -79,7 +79,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       sub: user.id,
       email: user.email,
       roleId: user.roleId,
-      role: roleName,
+      role: roleName.toUpperCase(),
       adherentId: user.adherent?.id ?? null,
       partenaireId:
         user.partenaire?.id ??
