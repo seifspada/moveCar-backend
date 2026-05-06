@@ -17,4 +17,4 @@ ENV PORT=10000
 
 EXPOSE 10000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed.ts && npm run start:prod"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
