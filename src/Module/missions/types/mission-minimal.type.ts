@@ -1,12 +1,11 @@
 // mission-minimal.type.ts
 import { ObjectType, Field, Float } from '@nestjs/graphql';
-
 @ObjectType()
 export class MissionCardType {
   @Field()
   id: string;
 
-  @Field({ nullable: true }) // ✅ Ajouté
+  @Field({ nullable: true })
   statut: string;
 
   @Field()
@@ -30,7 +29,7 @@ export class MissionCardType {
   @Field(() => Float)
   montantTotal: number;
 
-  @Field()
+  @Field({ nullable: true }) // ✅ corrigé
   dateDebut: Date;
 
   @Field({ nullable: true })

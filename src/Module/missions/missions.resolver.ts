@@ -1,4 +1,5 @@
 // src/Module/missions/missions.resolver.ts
+// ✅ CORRIGÉ : ResolveField typeVehicule et typeCarburant avec null-safety
 
 import {
   Resolver,
@@ -95,7 +96,7 @@ export class MissionsResolver {
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  missionsForCards — adhérent connecté (avec filtre réservations)
+  //  missionsForCards — adhérent connecté
   // ─────────────────────────────────────────────────────────────
 
   @Query(() => [MissionCardType])
@@ -111,16 +112,14 @@ export class MissionsResolver {
     });
     console.log('👤 adherent:', adherent);
 
-    const result = await this.missionsService.getMissionsForCards(
-      adherent?.id,
-    );
+    const result = await this.missionsService.getMissionsForCards(adherent?.id);
     console.log('✅ missions count:', result.length);
 
     return result;
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  getMissionsForCardsByAgence — admin/agent (sans filtre adhérent)
+  //  getMissionsForCardsByAgence — admin/agent
   // ─────────────────────────────────────────────────────────────
 
   @Query(() => [MissionCardType], {
@@ -128,12 +127,11 @@ export class MissionsResolver {
     description: 'Toutes les missions sans filtre (admin/agent)',
   })
   async getMissionsForCardsByAgence(): Promise<MissionWithRelations[]> {
-    // sans adherentId = toutes les missions
     return this.missionsService.getMissionsForCards();
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  searchMissions — adhérent connecté (texte + filtre réservations)
+  //  searchMissions — adhérent connecté
   // ─────────────────────────────────────────────────────────────
 
   @Query(() => MissionsPaginatedResponse)
@@ -141,18 +139,8 @@ export class MissionsResolver {
   async searchMissions(
     @CurrentUser() user: any,
     @Args('search', { nullable: true }) search?: string,
-    @Args('page', {
-      type: () => Int,
-      nullable: true,
-      defaultValue: 1,
-    })
-    page = 1,
-    @Args('pageSize', {
-      type: () => Int,
-      nullable: true,
-      defaultValue: 20,
-    })
-    pageSize = 20,
+    @Args('page', { type: () => Int, nullable: true, defaultValue: 1 }) page = 1,
+    @Args('pageSize', { type: () => Int, nullable: true, defaultValue: 20 }) pageSize = 20,
   ): Promise<MissionsPaginatedResponse> {
     const userId = user?.id || user?.sub;
     const adherent = await this.prisma.adherent.findUnique({
@@ -177,7 +165,7 @@ export class MissionsResolver {
   }
 
   // ─────────────────────────────────────────────────────────────
-  //  searchMissionsByTrajet — adhérent connecté (trajet + filtre réservations)
+  //  searchMissionsByTrajet — adhérent connecté
   // ─────────────────────────────────────────────────────────────
 
   @Query(() => MissionsPaginatedResponse)
@@ -186,8 +174,7 @@ export class MissionsResolver {
     @CurrentUser() user: any,
     @Args('filters', { type: () => SearchByTrajetInput }) filters: any,
     @Args('page', { type: () => Int, nullable: true }) page?: number,
-    @Args('pageSize', { type: () => Int, nullable: true })
-    pageSize?: number,
+    @Args('pageSize', { type: () => Int, nullable: true }) pageSize?: number,
   ): Promise<MissionsPaginatedResponse> {
     const actualPage = page ?? 1;
     const actualPageSize = pageSize ?? 20;
@@ -204,12 +191,8 @@ export class MissionsResolver {
       latitudeArrivee: Number(filters.latitudeArrivee),
       longitudeArrivee: Number(filters.longitudeArrivee),
       rayon: Number(filters.rayon),
-      dateDepart: filters.dateDepart
-        ? new Date(filters.dateDepart)
-        : undefined,
-      dateDepartMax: filters.dateDepartMax
-        ? new Date(filters.dateDepartMax)
-        : undefined,
+      dateDepart: filters.dateDepart ? new Date(filters.dateDepart) : undefined,
+      dateDepartMax: filters.dateDepartMax ? new Date(filters.dateDepartMax) : undefined,
     };
 
     const userId = user?.id || user?.sub;
@@ -218,13 +201,12 @@ export class MissionsResolver {
       select: { id: true },
     });
 
-    const { missions, total } =
-      await this.missionsService.searchMissionsByTrajet(
-        typedFilters,
-        actualPage,
-        actualPageSize,
-        adherent?.id,
-      );
+    const { missions, total } = await this.missionsService.searchMissionsByTrajet(
+      typedFilters,
+      actualPage,
+      actualPageSize,
+      adherent?.id,
+    );
 
     return {
       missions: missions as any,
@@ -245,10 +227,8 @@ export class MissionsResolver {
     @Context() context: any,
   ): Promise<MissionEntity> {
     if (!id) throw new BadRequestException('ID requis');
-
     const mission = await this.missionsService.findMissionById(id);
     if (!mission) throw new BadRequestException('Mission non trouvée');
-
     return mission;
   }
 
@@ -261,24 +241,34 @@ export class MissionsResolver {
     return mission.id;
   }
 
+  // ✅ CORRIGÉ : null-safety sur mission.vehicule
   @ResolveField()
   typeVehicule(@Parent() mission: MissionWithRelations) {
-    return mission.vehicule.typeVehicule;
+    const type = mission.vehicule?.typeVehicule;
+    if (!type) {
+      console.warn(`⚠️ [Resolver] mission ${mission.id} : vehicule ou typeVehicule est null/undefined`);
+    }
+    return type ?? 'BERLINE';
   }
 
+  // ✅ CORRIGÉ : null-safety sur mission.vehicule
   @ResolveField()
   typeCarburant(@Parent() mission: MissionWithRelations) {
-    return mission.vehicule.typeCarburant;
+    const type = mission.vehicule?.typeCarburant;
+    if (!type) {
+      console.warn(`⚠️ [Resolver] mission ${mission.id} : vehicule ou typeCarburant est null/undefined`);
+    }
+    return type ?? 'ESSENCE';
   }
 
   @ResolveField()
   villeDepart(@Parent() mission: MissionWithRelations) {
-    return mission.adresseDepart.villeNom;
+    return mission.adresseDepart?.villeNom ?? 'N/A';
   }
 
   @ResolveField()
   villeArrivee(@Parent() mission: MissionWithRelations) {
-    return mission.adresseArrivee.villeNom;
+    return mission.adresseArrivee?.villeNom ?? 'N/A';
   }
 
   @ResolveField(() => Number)
@@ -299,7 +289,7 @@ export class MissionsResolver {
     return this.decimalToNumber(mission.calculs.montantTotal);
   }
 
-  @ResolveField(() => Date)
+  @ResolveField(() => Date, { nullable: true })
   dateDebut(@Parent() mission: MissionWithRelations): Date | null {
     return mission.disponibilite?.dateDebut ?? null;
   }
