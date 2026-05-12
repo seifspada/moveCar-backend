@@ -252,37 +252,17 @@ async searchMissionsByPosition(
       // 7. Créer ou trouver le véhicule
       console.log('🔍 Recherche du véhicule...');
   // ─── APRÈS (corrigé) ───
-let vehicule = await this.prisma.vehicule.findUnique({
-  where: { immatriculation: dto.immatriculation.toUpperCase() },
-});
-
-if (!vehicule) {
-  // Nouveau véhicule : on le crée
-  vehicule = await this.prisma.vehicule.create({
-    data: {
-      typeVehicule:    dto.typeVehicule as any,
-      typeCarburant:   dto.typeCarburant as any,
-      marqueModele:    dto.marqueModele,
-      immatriculation: dto.immatriculation.toUpperCase(),
-      nombrePlaces:    dto.nombrePlaces,
-      boiteVitesse:    dto.boiteVitesse as any,
-      agent: { connect: { id: agentId } },
-    },
-  });
-} else {
-  // ✅ Véhicule existant : on met à jour le type et les infos
-  vehicule = await this.prisma.vehicule.update({
-    where: { immatriculation: dto.immatriculation.toUpperCase() },
-    data: {
-      typeVehicule:  dto.typeVehicule as any,
-      typeCarburant: dto.typeCarburant as any,
-      marqueModele:  dto.marqueModele,
-      nombrePlaces:  dto.nombrePlaces,
-      boiteVitesse:  dto.boiteVitesse as any,
-    },
-  });
-}
-
+      const vehicule = await this.prisma.vehicule.create({
+        data: {
+          typeVehicule:    dto.typeVehicule as any,
+          typeCarburant:   dto.typeCarburant as any,
+          marqueModele:    dto.marqueModele,
+          immatriculation: dto.immatriculation.toUpperCase(),
+          nombrePlaces:    dto.nombrePlaces,
+          boiteVitesse:    dto.boiteVitesse as any,
+          agent: { connect: { id: agentId } },
+        },
+      });
       // 8. Créer les adresses en parallèle
       console.log('📍 Création des adresses...');
       const [adresseDepart, adresseArrivee] = await Promise.all([

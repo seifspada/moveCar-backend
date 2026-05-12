@@ -633,7 +633,7 @@ model Vehicule {
   typeVehicule    TypeVehicule
   typeCarburant   TypeCarburant
   marqueModele    String
-  immatriculation String        @unique
+  immatriculation String
   nombrePlaces    Int
   boiteVitesse    BoiteVitesse
 
