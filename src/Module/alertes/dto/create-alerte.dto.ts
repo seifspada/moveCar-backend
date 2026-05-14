@@ -1,37 +1,61 @@
-// src/Module/alertes/dto/create-alerte.dto.ts
-import { ApiProperty } from '@nestjs/swagger'; // ✅ Importer
-import { IsString, IsNumber, IsInt, Min, Max, IsOptional } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsNumber, IsInt, Min, Max, IsOptional, IsBoolean } from 'class-validator';
 
 export class CreateAlerteGeographiqueDto {
-  @ApiProperty({ example: 1, description: 'ID de l\'utilisateur' }) // ✅
+  @ApiProperty({ example: 1 })
   @IsInt()
   userId: number;
 
-  @ApiProperty({ example: 'Paris', description: 'Nom de la ville' }) // ✅
+  @ApiProperty({ example: 'Paris' })
   @IsString()
   villeNom: string;
 
-  @ApiProperty({ example: 48.8566, description: 'Latitude de la ville' }) // ✅
+  @ApiProperty({ example: 48.8566 })
   @IsNumber()
   latitude: number;
 
-  @ApiProperty({ example: 2.3522, description: 'Longitude de la ville' }) // ✅
+  @ApiProperty({ example: 2.3522 })
   @IsNumber()
   longitude: number;
 
-  @ApiProperty({ example: 50, description: 'Rayon en km', minimum: 1, maximum: 500 }) // ✅
+  @ApiProperty({ example: 50, minimum: 1, maximum: 500 })
   @IsInt()
   @Min(1)
   @Max(500)
   rayon: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  emailActif?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  pushActif?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  fcmToken?: string;
+
+  @ApiProperty({ example: '2026-02-15', required: false })   // ✅ ajout
+  @IsOptional()
+  @IsString()
+  dateDepart?: string;
+
+  @ApiProperty({ example: '2026-02-20', required: false })   // ✅ ajout
+  @IsOptional()
+  @IsString()
+  dateDepartMax?: string;
 }
 
 export class CreateAlerteTrajetDto {
-  @ApiProperty({ example: 1, description: 'ID de l\'utilisateur' })
+  @ApiProperty({ example: 1 })
   @IsInt()
   userId: number;
 
-  @ApiProperty({ example: 'Paris', description: 'Ville de départ' })
+  @ApiProperty({ example: 'Paris' })
   @IsString()
   villeDepartNom: string;
 
@@ -43,7 +67,7 @@ export class CreateAlerteTrajetDto {
   @IsNumber()
   longitudeDepart: number;
 
-  @ApiProperty({ example: 'Lyon', description: 'Ville d\'arrivée' })
+  @ApiProperty({ example: 'Lyon' })
   @IsString()
   villeArriveeNom: string;
 
@@ -61,21 +85,28 @@ export class CreateAlerteTrajetDto {
   @Max(500)
   rayon: number;
 
-  @ApiProperty({ 
-    example: '2026-02-15', 
-    description: 'Date de départ souhaitée (YYYY-MM-DD)',
-    required: false 
-  })
+  @ApiProperty({ example: '2026-02-15', required: false })
   @IsOptional()
   @IsString()
   dateDepart?: string;
 
-  @ApiProperty({ 
-    example: '2026-02-20', 
-    description: 'Date de départ maximum (YYYY-MM-DD)',
-    required: false 
-  })
+  @ApiProperty({ example: '2026-02-20', required: false })
   @IsOptional()
   @IsString()
   dateDepartMax?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  emailActif?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  pushActif?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  fcmToken?: string;
 }

@@ -1,15 +1,22 @@
 // src/Module/alertes/alertes.module.ts
 import { Module } from '@nestjs/common';
-import { AlertesController } from './alertes.controller';
 import { AlertesService } from './alertes.service';
-import { EmailModule } from '../email/email.module';
-import { GeoModule } from '../geo/geo.module';
-import { PrismaModule } from '../../prisma/prisma.module';
+import { AlertesResolver } from './alertes.resolver';
+import { PrismaService } from '../../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
+import { GeoService } from '../geo/geo.service';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
-  imports: [PrismaModule, EmailModule,GeoModule],
-  controllers: [AlertesController],
-  providers: [AlertesService],
-  exports: [AlertesService], // Pour l'utiliser dans MissionsService
+  imports: [NotificationModule],   // ← ici, pas dans providers
+  providers: [
+    AlertesService,
+    AlertesResolver,
+    PrismaService,
+    EmailService,
+    GeoService,
+    // NotificationModule retiré d'ici
+  ],
+  exports: [AlertesService],
 })
 export class AlertesModule {}

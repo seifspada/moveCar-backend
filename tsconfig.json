@@ -2,6 +2,7 @@
   "compilerOptions": {
     "module": "commonjs",
     "moduleResolution": "node",
+    "resolveJsonModule": true,
 
     "rootDir": "./src",
     "declaration": true,

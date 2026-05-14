@@ -4,6 +4,8 @@ import { ConfigModule } from '@nestjs/config';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
+import * as admin from 'firebase-admin';
+import * as serviceAccount from '../firebase-service-account.json';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -26,6 +28,16 @@ import { AdminModule } from './Module/admin/admin.module';
 import { DocumentProcessingModule } from './Module/document-processing/document-processing.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { PreTripInspectionModule } from './Module/pretrip-inspection/pretrip-inspection.module';
+import { NotificationModule } from './Module/notification/notification.module';
+
+// ✅ Initialisation Firebase Admin (une seule fois au démarrage)
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(
+      serviceAccount as admin.ServiceAccount,
+    ),
+  });
+}
 
 @Module({
   imports: [
@@ -70,6 +82,7 @@ import { PreTripInspectionModule } from './Module/pretrip-inspection/pretrip-ins
     AdminModule,
     DocumentProcessingModule,
     PreTripInspectionModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

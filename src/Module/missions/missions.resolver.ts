@@ -1,9 +1,8 @@
-// src/Module/missions/missions.resolver.ts
-// ✅ CORRIGÉ : ResolveField typeVehicule et typeCarburant avec null-safety
-
+// src/Module/missions/missions.resolver.ts - COMPLET avec createMission mutation
 import {
   Resolver,
   Query,
+  Mutation,
   ResolveField,
   Parent,
   Args,
@@ -13,6 +12,7 @@ import {
 import {
   UseGuards,
   BadRequestException,
+  Inject,
 } from '@nestjs/common';
 import { MissionsService, MissionWithRelations } from './missions.service';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -23,6 +23,7 @@ import {
   SearchByTrajetInput,
 } from './types/mission-search-filters.input';
 import { MissionEntity } from './types/mission-entity.type';
+import { CreateMissionInput } from './inputs/create-mission.input';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GqlAuthGuard } from '../../auth/guards/gql-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
@@ -35,9 +36,12 @@ export class MissionsResolver {
   ) {}
 
   // ─────────────────────────────────────────────────────────────
-  //  RECHERCHE PAR POSITION (adhérent connecté)
+  //  QUERIES
   // ─────────────────────────────────────────────────────────────
 
+  /**
+   * ✅ Recherche par position (adhérent connecté)
+   */
   @Query(() => MissionsPaginatedResponse)
   @UseGuards(GqlAuthGuard)
   async searchMissionsByPosition(
@@ -95,10 +99,9 @@ export class MissionsResolver {
     };
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  missionsForCards — adhérent connecté
-  // ─────────────────────────────────────────────────────────────
-
+  /**
+   * ✅ Missions pour cartes — adhérent connecté
+   */
   @Query(() => [MissionCardType])
   @UseGuards(GqlAuthGuard)
   async missionsForCards(@CurrentUser() user: any) {
@@ -118,10 +121,9 @@ export class MissionsResolver {
     return result;
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  getMissionsForCardsByAgence — admin/agent
-  // ─────────────────────────────────────────────────────────────
-
+  /**
+   * ✅ Missions par agence — admin/agent
+   */
   @Query(() => [MissionCardType], {
     name: 'getMissionsForCardsByAgence',
     description: 'Toutes les missions sans filtre (admin/agent)',
@@ -130,10 +132,9 @@ export class MissionsResolver {
     return this.missionsService.getMissionsForCards();
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  searchMissions — adhérent connecté
-  // ─────────────────────────────────────────────────────────────
-
+  /**
+   * ✅ Recherche simple (adhérent connecté)
+   */
   @Query(() => MissionsPaginatedResponse)
   @UseGuards(GqlAuthGuard)
   async searchMissions(
@@ -164,10 +165,9 @@ export class MissionsResolver {
     };
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  searchMissionsByTrajet — adhérent connecté
-  // ─────────────────────────────────────────────────────────────
-
+  /**
+   * ✅ Recherche par trajet (adhérent connecté)
+   */
   @Query(() => MissionsPaginatedResponse)
   @UseGuards(GqlAuthGuard)
   async searchMissionsByTrajet(
@@ -217,10 +217,9 @@ export class MissionsResolver {
     };
   }
 
-  // ─────────────────────────────────────────────────────────────
-  //  PAR ID
-  // ─────────────────────────────────────────────────────────────
-
+  /**
+   * ✅ Mission par ID
+   */
   @Query(() => MissionEntity, { nullable: true })
   async getMissionById(
     @Args('id', { type: () => String }) id: string,
@@ -233,6 +232,29 @@ export class MissionsResolver {
   }
 
   // ─────────────────────────────────────────────────────────────
+  //  MUTATIONS
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * ✅ Créer une mission (PRINCIPALE)
+   */
+  @Mutation(() => MissionEntity)
+  async createMission(
+    @Args('input', { type: () => CreateMissionInput })
+    input: CreateMissionInput,
+  ): Promise<MissionEntity> {
+    console.log('🚀 Mutation: createMission');
+
+    if (!input) {
+      throw new BadRequestException('Input requis');
+    }
+
+    // Convertir en CreateMissionDto si nécessaire
+    const result = await this.missionsService.creerMission(input as any);
+    return result;
+  }
+
+  // ─────────────────────────────────────────────────────────────
   //  RESOLVE FIELDS
   // ─────────────────────────────────────────────────────────────
 
@@ -241,7 +263,6 @@ export class MissionsResolver {
     return mission.id;
   }
 
-  // ✅ CORRIGÉ : null-safety sur mission.vehicule
   @ResolveField()
   typeVehicule(@Parent() mission: MissionWithRelations) {
     const type = mission.vehicule?.typeVehicule;
@@ -251,7 +272,6 @@ export class MissionsResolver {
     return type ?? 'BERLINE';
   }
 
-  // ✅ CORRIGÉ : null-safety sur mission.vehicule
   @ResolveField()
   typeCarburant(@Parent() mission: MissionWithRelations) {
     const type = mission.vehicule?.typeCarburant;

@@ -165,266 +165,268 @@ async searchMissionsByPosition(
   return { missions, total };
 }
 
-  // ─────────────────────────────────────────────────────────────
-  //  CRÉER UNE MISSION (agent)
-  // ─────────────────────────────────────────────────────────────
+// src/Module/missions/missions.service.ts - EXCERPT (creerMission corrigée)
+// ⚠️ Remplacez seulement la fonction creerMission
 
-  async creerMission(
-    dto: CreateMissionDto,
-    documents?: any[],
-  ): Promise<MissionResponseDto> {
-    try {
-      const agentId = this.convertirEnNombre(dto.agentId, 'agentId');
+async creerMission(
+  dto: CreateMissionDto,
+  documents?: any[],
+): Promise<MissionResponseDto> {
+  try {
+    const agentId = this.convertirEnNombre(dto.agentId, 'agentId');
 
-      // 1. Récupérer l'agent avec sa chaîne agence → partenaire
-      console.log('🔍 Vérification de l\'agent...');
-      const agent = await this.prisma.agent.findUnique({
-        where: { id: agentId },
-        include: {
-          agence: {
-            include: { partenaire: true },
-          },
+    // 1. Récupérer l'agent avec sa chaîne agence → partenaire
+    console.log('🔍 Vérification de l\'agent...');
+    const agent = await this.prisma.agent.findUnique({
+      where: { id: agentId },
+      include: {
+        agence: {
+          include: { partenaire: true },
         },
-      });
+      },
+    });
 
-      if (!agent) {
-        throw new HttpException(`Agent #${agentId} introuvable`, HttpStatus.NOT_FOUND);
-      }
-      if (!agent.isActive) {
-        throw new HttpException(`Agent #${agentId} n'est pas actif`, HttpStatus.FORBIDDEN);
-      }
-      if (!agent.agence) {
-        throw new HttpException(`Agent #${agentId} n'est associé à aucune agence`, HttpStatus.BAD_REQUEST);
-      }
+    if (!agent) {
+      throw new HttpException(`Agent #${agentId} introuvable`, HttpStatus.NOT_FOUND);
+    }
+    if (!agent.isActive) {
+      throw new HttpException(`Agent #${agentId} n'est pas actif`, HttpStatus.FORBIDDEN);
+    }
+    if (!agent.agence) {
+      throw new HttpException(`Agent #${agentId} n'est associé à aucune agence`, HttpStatus.BAD_REQUEST);
+    }
 
-      const partenaireId = agent.agence.partenaireId;
+    const partenaireId = agent.agence.partenaireId;
 
-      // 2. Récupérer les informations des villes
-      console.log('🔍 Récupération des informations des villes...');
-      const [villeDepart, villeArrivee] = await Promise.all([
-        this.obtenirInfoVille(dto.villeDepart),
-        this.obtenirInfoVille(dto.villeArrivee),
-      ]);
+    // 2. Récupérer les informations des villes
+    console.log('🔍 Récupération des informations des villes...');
+    const [villeDepart, villeArrivee] = await Promise.all([
+      this.obtenirInfoVille(dto.villeDepart),
+      this.obtenirInfoVille(dto.villeArrivee),
+    ]);
 
-      // 3. Calculer la route
-      console.log('🚗 Calcul de la route...');
-      const calculRoute = await this.routeCalculator.calculerRouteParVilles(
-        dto.villeDepart,
-        dto.villeArrivee,
-        dto.typeVehicule,
+    // 3. Calculer la route
+    console.log('🚗 Calcul de la route...');
+    const calculRoute = await this.routeCalculator.calculerRouteParVilles(
+      dto.villeDepart,
+      dto.villeArrivee,
+      dto.typeVehicule,
+    );
+
+    // 4. Convertir la durée et calculer la date de départ maximum
+    const dureeMinutes  = this.convertirDureeEnMinutes(calculRoute.dureeFormatee);
+    const dateArrivee   = new Date(dto.dateFin);
+    const dateDepartMax = new Date(dateArrivee.getTime() - dureeMinutes * 60 * 1000);
+
+    // 5. Valider la date de début
+    const dateDebut = new Date(dto.dateDebut);
+    if (dateDebut > dateDepartMax) {
+      throw new HttpException(
+        `La date de départ (${this.formaterDateAvecHeure(dateDebut)}) doit être au plus tard ` +
+        `le ${this.formaterDateAvecHeure(dateDepartMax)}. ` +
+        `Le trajet nécessite ${calculRoute.dureeFormatee} (${dureeMinutes} minutes) ` +
+        `pour arriver à ${this.formaterDateAvecHeure(dateArrivee)}.`,
+        HttpStatus.BAD_REQUEST,
       );
+    }
 
-      // 4. Convertir la durée et calculer la date de départ maximum
-      const dureeMinutes  = this.convertirDureeEnMinutes(calculRoute.dureeFormatee);
-      const dateArrivee   = new Date(dto.dateFin);
-      const dateDepartMax = new Date(dateArrivee.getTime() - dureeMinutes * 60 * 1000);
-
-      // 5. Valider la date de début
-      const dateDebut = new Date(dto.dateDebut);
-      if (dateDebut > dateDepartMax) {
-        throw new HttpException(
-          `La date de départ (${this.formaterDateAvecHeure(dateDebut)}) doit être au plus tard ` +
-          `le ${this.formaterDateAvecHeure(dateDepartMax)}. ` +
-          `Le trajet nécessite ${calculRoute.dureeFormatee} (${dureeMinutes} minutes) ` +
-          `pour arriver à ${this.formaterDateAvecHeure(dateArrivee)}.`,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      // 6. Récupérer prixParKm via partenaire → demandePartenaire → contrat
-      console.log('💰 Récupération du prix/km depuis le contrat partenaire...');
-      const contratPartenaire = await this.prisma.contratPartenaire.findFirst({
-        where: {
-          estActif: true,
-          demandePartenaire: {
-            partenaire: { id: partenaireId },
-          },
+    // 6. Récupérer prixParKm via partenaire → demandePartenaire → contrat
+    console.log('💰 Récupération du prix/km depuis le contrat partenaire...');
+    const contratPartenaire = await this.prisma.contratPartenaire.findFirst({
+      where: {
+        estActif: true,
+        demandePartenaire: {
+          partenaire: { id: partenaireId },
         },
-        orderBy: { dateCreation: 'desc' },
-      });
+      },
+      orderBy: { dateCreation: 'desc' },
+    });
 
-      const prixParKm = contratPartenaire?.prixParKm ?? 0.95;
-      console.log(
-        `💰 Prix/km: ${prixParKm}€ ` +
-        `(${contratPartenaire ? `contrat #${contratPartenaire.id}` : 'valeur par défaut 0.95'})`,
-      );
+    const prixParKm = contratPartenaire?.prixParKm ?? 0.95;
+    console.log(
+      `💰 Prix/km: ${prixParKm}€ ` +
+      `(${contratPartenaire ? `contrat #${contratPartenaire.id}` : 'valeur par défaut 0.95'})`,
+    );
 
-      // 7. Créer ou trouver le véhicule
-      console.log('🔍 Recherche du véhicule...');
-  // ─── APRÈS (corrigé) ───
-      const vehicule = await this.prisma.vehicule.create({
+    // 7. Créer ou trouver le véhicule
+    console.log('🔍 Recherche du véhicule...');
+    const vehicule = await this.prisma.vehicule.create({
+      data: {
+        typeVehicule:    dto.typeVehicule as any,
+        typeCarburant:   dto.typeCarburant as any,
+        marqueModele:    dto.marqueModele,
+        immatriculation: dto.immatriculation.toUpperCase(),
+        nombrePlaces:    dto.nombrePlaces,
+        boiteVitesse:    dto.boiteVitesse as any,
+        agent: { connect: { id: agentId } },
+      },
+    });
+
+    // 8. Créer les adresses en parallèle
+    console.log('📍 Création des adresses...');
+    const [adresseDepart, adresseArrivee] = await Promise.all([
+      this.prisma.adresse.create({
         data: {
-          typeVehicule:    dto.typeVehicule as any,
-          typeCarburant:   dto.typeCarburant as any,
-          marqueModele:    dto.marqueModele,
-          immatriculation: dto.immatriculation.toUpperCase(),
-          nombrePlaces:    dto.nombrePlaces,
-          boiteVitesse:    dto.boiteVitesse as any,
-          agent: { connect: { id: agentId } },
+          villeId:         villeDepart.codeInsee,
+          villeNom:        villeDepart.nom,
+          adresseComplete: dto.adresseDepartComplete,
+          typeLieu:        dto.typeLieuDepart as any,
+          nomLieu:         dto.nomLieuDepart || null,
+          latitude:        villeDepart.latitude,
+          longitude:       villeDepart.longitude,
         },
-      });
-      // 8. Créer les adresses en parallèle
-      console.log('📍 Création des adresses...');
-      const [adresseDepart, adresseArrivee] = await Promise.all([
-        this.prisma.adresse.create({
-          data: {
-            villeId:         villeDepart.codeInsee,
-            villeNom:        villeDepart.nom,
-            adresseComplete: dto.adresseDepartComplete,
-            typeLieu:        dto.typeLieuDepart as any,
-            nomLieu:         dto.nomLieuDepart || null,
-            latitude:        villeDepart.latitude,
-            longitude:       villeDepart.longitude,
-          },
-        }),
-        this.prisma.adresse.create({
-          data: {
-            villeId:         villeArrivee.codeInsee,
-            villeNom:        villeArrivee.nom,
-            adresseComplete: dto.adresseArriveeComplete,
-            typeLieu:        dto.typeLieuArrivee as any,
-            nomLieu:         dto.nomLieuArrivee || null,
-            latitude:        villeArrivee.latitude,
-            longitude:       villeArrivee.longitude,
-          },
-        }),
-      ]);
-
-      // 9. Créer la mission
-      console.log('📝 Création de la mission...');
-      const mission = await this.prisma.mission.create({
+      }),
+      this.prisma.adresse.create({
         data: {
-          agentId:          agentId,           // ✅ responsable principal
-          agenceId:         agent.agenceId,
-          vehiculeId:       vehicule.id,
-          adresseDepartId:  adresseDepart.id,
-          adresseArriveeId: adresseArrivee.id,
-          statut:           'EN_ATTENTE',
-          commentaire:      dto.commentaire || null,
-          // ✅ partenaireId conservé uniquement pour la facturation/contrat
-          partenaireId:     partenaireId,
+          villeId:         villeArrivee.codeInsee,
+          villeNom:        villeArrivee.nom,
+          adresseComplete: dto.adresseArriveeComplete,
+          typeLieu:        dto.typeLieuArrivee as any,
+          nomLieu:         dto.nomLieuArrivee || null,
+          latitude:        villeArrivee.latitude,
+          longitude:       villeArrivee.longitude,
         },
-      });
+      }),
+    ]);
 
-      // 10. Créer la disponibilité
-      console.log('📅 Création de la disponibilité...');
-      await this.prisma.disponibiliteMission.create({
+    // 9. Créer la mission
+    console.log('📝 Création de la mission...');
+    const mission = await this.prisma.mission.create({
+      data: {
+        agentId:          agentId,
+        agenceId:         agent.agenceId,
+        vehiculeId:       vehicule.id,
+        adresseDepartId:  adresseDepart.id,
+        adresseArriveeId: adresseArrivee.id,
+        statut:           'EN_ATTENTE',
+        commentaire:      dto.commentaire || null,
+        partenaireId:     partenaireId,
+      },
+    });
+
+    // 10. Créer la disponibilité
+    console.log('📅 Création de la disponibilité...');
+    await this.prisma.disponibiliteMission.create({
+      data: {
+        missionId:     mission.id,
+        dateDebut:     dateDebut,
+        dateFin:       dateArrivee,
+        dateDepartMax: dateDepartMax,
+      },
+    });
+
+    // 11. Calculer le montant
+    const montantTotal       = calculRoute.distanceKm * prixParKm;
+    const montantTotalArrondi = Math.round(montantTotal);
+
+    console.log(`💰 Montant: ${prixParKm}€ × ${calculRoute.distanceKm}km = ${montantTotal.toFixed(2)}€`);
+
+    // 12. Créer le calcul de mission
+    console.log('🧮 Enregistrement du calcul...');
+    await this.prisma.calculMission.create({
+      data: {
+        mission:      { connect: { id: mission.id } },
+        distanceKm:   new Decimal(calculRoute.distanceKm),
+        fraisPeage:   new Decimal(calculRoute.fraisPeage),
+        montantKm:    new Decimal(parseFloat((calculRoute.distanceKm * prixParKm).toFixed(2))),
+        montantFinal: new Decimal(montantTotalArrondi),
+        montantTotal: new Decimal(montantTotalArrondi),
+        detailCalcul: {
+          distanceKm:            calculRoute.distanceKm,
+          dureeFormatee:         calculRoute.dureeFormatee,
+          dureeMinutes:          dureeMinutes,
+          fraisPeage:            calculRoute.fraisPeage,
+          prixParKm:             prixParKm,
+          montantBrut:           parseFloat(montantTotal.toFixed(2)),
+          montantTotal:          montantTotalArrondi,
+          typeVehicule:          dto.typeVehicule,
+          dateDepartMax:         dateDepartMax.toISOString(),
+          dateDepartMaxFormatee: this.formaterDateAvecHeure(dateDepartMax),
+          contratPartenaireId:   contratPartenaire?.id ?? null,
+        },
+      },
+    });
+
+    // 13. Créer les notifications
+    console.log('🔔 Création des notifications...');
+    if (dto.notifierDepart) {
+      await this.prisma.notificationMission.create({
         data: {
-          missionId:     mission.id,
-          dateDebut:     dateDebut,
-          dateFin:       dateArrivee,
-          dateDepartMax: dateDepartMax,
+          missionId:        mission.id,
+          typeNotification: 'DEPART',
+          actif:            true,
+          nomContact:       dto.nomContactDepart       || null,
+          telephoneContact: dto.telephoneContactDepart || null,
         },
       });
-
-      // 11. Calculer le montant
-      const montantTotal       = calculRoute.distanceKm * prixParKm;
-      const montantTotalArrondi = Math.round(montantTotal);
-
-      console.log(`💰 Montant: ${prixParKm}€ × ${calculRoute.distanceKm}km = ${montantTotal.toFixed(2)}€`);
-
-      // 12. Créer le calcul de mission
-      console.log('🧮 Enregistrement du calcul...');
-      await this.prisma.calculMission.create({
+    }
+    if (dto.notifierArrivee) {
+      await this.prisma.notificationMission.create({
         data: {
-          mission:      { connect: { id: mission.id } },
-          distanceKm:   new Decimal(calculRoute.distanceKm),
-          fraisPeage:   new Decimal(calculRoute.fraisPeage),
-          montantKm:    new Decimal(parseFloat((calculRoute.distanceKm * prixParKm).toFixed(2))),
-          montantFinal: new Decimal(montantTotalArrondi),
-          montantTotal: new Decimal(montantTotalArrondi),
-          detailCalcul: {
-            distanceKm:            calculRoute.distanceKm,
-            dureeFormatee:         calculRoute.dureeFormatee,
-            dureeMinutes:          dureeMinutes,
-            fraisPeage:            calculRoute.fraisPeage,
-            prixParKm:             prixParKm,
-            montantBrut:           parseFloat(montantTotal.toFixed(2)),
-            montantTotal:          montantTotalArrondi,
-            typeVehicule:          dto.typeVehicule,
-            dateDepartMax:         dateDepartMax.toISOString(),
-            dateDepartMaxFormatee: this.formaterDateAvecHeure(dateDepartMax),
-            contratPartenaireId:   contratPartenaire?.id ?? null,
-          },
+          missionId:        mission.id,
+          typeNotification: 'ARRIVEE',
+          actif:            true,
+          nomContact:       dto.nomContactArrivee       || null,
+          telephoneContact: dto.telephoneContactArrivee || null,
         },
       });
+    }
 
-      // 13. Créer les notifications
-      console.log('🔔 Création des notifications...');
-      if (dto.notifierDepart) {
-        await this.prisma.notificationMission.create({
+    // 14. Gérer les documents
+    if (Array.isArray(documents) && documents.length > 0) {
+      console.log(`📄 Upload de ${documents.length} document(s)...`);
+      for (const file of documents) {
+        const cheminFichier = file.filepath || file.path || file.filename;
+        await this.prisma.document.create({
           data: {
-            missionId:        mission.id,
-            typeNotification: 'DEPART',
-            actif:            true,
-            nomContact:       dto.nomContactDepart       || null,
-            telephoneContact: dto.telephoneContactDepart || null,
-          },
-        });
-      }
-      if (dto.notifierArrivee) {
-        await this.prisma.notificationMission.create({
-          data: {
-            missionId:        mission.id,
-            typeNotification: 'ARRIVEE',
-            actif:            true,
-            nomContact:       dto.nomContactArrivee       || null,
-            telephoneContact: dto.telephoneContactArrivee || null,
-          },
-        });
-      }
-
-      // 14. Gérer les documents
-      if (Array.isArray(documents) && documents.length > 0) {
-        console.log(`📄 Upload de ${documents.length} document(s)...`);
-        for (const file of documents) {
-          const cheminFichier = file.filepath || file.path || file.filename;
-          await this.prisma.document.create({
-            data: {
-              typeDocument: 'DOCUMENT_ADMINISTRATIF',
-              missionId:    mission.id,
-              fichiers: {
-                create: [{ cheminFichier }],
-              },
+            typeDocument: 'DOCUMENT_ADMINISTRATIF',
+            missionId:    mission.id,
+            fichiers: {
+              create: [{ cheminFichier }],
             },
-          });
-        }
-      } else {
-        console.log('✅ Aucun document fourni (optionnel)');
-      }
-
-      // 15. Vérifier les alertes
-      console.log('🔔 Vérification des alertes...');
-      try {
-        await this.alertesService.checkAlertes({
-          id: mission.id,
-          adresseDepart,
-          adresseArrivee,
-          vehicule,
-          calculs: {
-            distanceKm:   calculRoute.distanceKm,
-            fraisPeage:   calculRoute.fraisPeage,
-            montantTotal: montantTotal,
           },
         });
-        console.log('✅ Alertes vérifiées');
-      } catch (alertError) {
-        console.error('⚠️ Erreur lors de la vérification des alertes:', alertError);
       }
+    } else {
+      console.log('✅ Aucun document fourni (optionnel)');
+    }
 
-      console.log('✅ Mission créée avec succès!');
-      return this.obtenirMission(mission.id);
+    // 15. ✅ CORRIGÉ : Vérifier les alertes
+    // ⚠️ checkAlertes est une fonction SERVICE — elle NE fait PAS d'appel GraphQL
+    // Elle récupère juste les alertes en BDD et envoie emails/push
+    console.log('🔔 Vérification des alertes...');
+    try {
+      await this.alertesService.checkAlertes({
+        id: mission.id,
+        adresseDepart,
+        adresseArrivee,
+        vehicule,
+        calculs: {
+          distanceKm:   calculRoute.distanceKm,
+          fraisPeage:   calculRoute.fraisPeage,
+          montantTotal: montantTotal,
+        },
+      });
+      console.log('✅ Alertes vérifiées');
+    } catch (alertError) {
+      // ⚠️ On log l'erreur mais on ne faillit pas la mission
+      console.error('⚠️ Erreur lors de la vérification des alertes:', alertError);
+      // Ne pas throw — les alertes ne doivent pas bloquer la création de mission
+    }
 
-    } catch (error) {
-  if (error instanceof HttpException) throw error;
-  const message = error instanceof Error ? error.message : String(error);
-  console.error('❌ Erreur création mission:', message);
-  throw new HttpException(
-    `Erreur lors de la création de la mission: ${message}`,
-    HttpStatus.INTERNAL_SERVER_ERROR,
-  );
-}
+    console.log('✅ Mission créée avec succès!');
+    return this.obtenirMission(mission.id);
+
+  } catch (error) {
+    if (error instanceof HttpException) throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('❌ Erreur création mission:', message);
+    throw new HttpException(
+      `Erreur lors de la création de la mission: ${message}`,
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
   }
+}
 
 
   // ─────────────────────────────────────────────────────────────

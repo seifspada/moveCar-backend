@@ -792,44 +792,39 @@ model CalculMission {
 
 model AlerteGeographique {
   id String @id @default(cuid())
-
   // Utilisateur
   userId Int
   user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   // Type d'alerte
   type TypeAlerte
-
   // Rayon commun aux 2 types
   rayon Int // en km
-
   // Type 1 : Géographique simple (1 ville)
   villeNom  String? @db.VarChar(255)
   latitude  Float?
   longitude Float?
-
   // Type 2 : Trajet (départ → arrivée)
   villeDepartNom  String? @db.VarChar(255)
   latitudeDepart  Float?
   longitudeDepart Float?
-
   villeArriveeNom  String? @db.VarChar(255)
   latitudeArrivee  Float?
   longitudeArrivee Float?
-
   dateDepart    DateTime?
   dateDepartMax DateTime?
-
   // État
   actif Boolean @default(true)
+  // Canal de notification
+  emailActif  Boolean  @default(false)
+  pushActif   Boolean  @default(false)
+  fcmToken    String?
+  
 
   // Notifications envoyées
   notifications NotificationAlerte[]
-
   // Traçabilité
   dateCreation     DateTime @default(now())
   dateModification DateTime @updatedAt
-
   @@index([userId, actif])
   @@index([type, actif])
   @@map("alertes_geographiques")
@@ -837,17 +832,13 @@ model AlerteGeographique {
 
 model NotificationAlerte {
   id String @id @default(cuid())
-
   alerteId String
   alerte   AlerteGeographique @relation(fields: [alerteId], references: [id], onDelete: Cascade)
-
   missionId String
-
-  emailEnvoye Boolean   @default(false)
+  emailEnvoye Boolean  @default(false)
+  pushEnvoye  Boolean  @default(false)
   dateEnvoi   DateTime?
-
   dateCreation DateTime @default(now())
-
   @@index([alerteId, missionId])
   @@map("notifications_alertes")
 }
