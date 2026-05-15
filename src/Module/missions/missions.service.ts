@@ -517,28 +517,46 @@ async creerMission(
   //  RÉCUPÉRER UNE MISSION
   // ─────────────────────────────────────────────────────────────
 
-  async obtenirMission(missionId: string | number): Promise<MissionResponseDto> {
-    const id = typeof missionId === 'number' ? missionId.toString() : missionId;
+ async obtenirMission(missionId: string | number): Promise<MissionResponseDto> {
+  const id = typeof missionId === 'number' ? missionId.toString() : missionId;
 
-    const mission = await this.prisma.mission.findUnique({
-      where: { id },
-      include: {
-        vehicule: true,
-        adresseDepart: true,
-        adresseArrivee: true,
-        disponibilite: true,
-        notifications: true,
-        calculs: true,
-        documents: true,
+  const mission = await this.prisma.mission.findUnique({
+    where: { id },
+    include: {
+      vehicule: true,
+      adresseDepart: true,
+      adresseArrivee: true,
+      disponibilite: true,
+      notifications: true,
+      calculs: true,
+      documents: { include: { fichiers: true } },
+      agent: {                          // ← ajout
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              adherent: {
+                select: {
+                  nom: true,
+                  prenom: true,
+                  telephone: true,
+                  photo: true,
+                },
+              },
+            },
+          },
+        },
       },
-    });
+    },
+  });
 
-    if (!mission) {
-      throw new HttpException('Mission non trouvée', HttpStatus.NOT_FOUND);
-    }
-
-    return mission as any;
+  if (!mission) {
+    throw new HttpException('Mission non trouvée', HttpStatus.NOT_FOUND);
   }
+
+  return mission as any;
+}
 
   async findMissionById(id: string) {
     const mission = await this.prisma.mission.findUnique({

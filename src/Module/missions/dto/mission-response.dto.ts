@@ -5,7 +5,19 @@ export interface MissionResponseDto {
   dateCreation: Date;
   dateModification: Date;
   partenaireId: number;  // ✅ Ajouté
-  
+   agent: {                          // ← ajout
+    id: number;
+    user: {
+      id: number;
+      email: string;
+      adherent?: {
+        nom?: string;
+        prenom?: string;
+        telephone?: string;
+        photo?: string;
+      };
+    };
+  };
   vehicule: {
     id: string;
     typeVehicule: string;

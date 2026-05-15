@@ -23,10 +23,10 @@ import {
   SearchByTrajetInput,
 } from './types/mission-search-filters.input';
 import { MissionEntity } from './types/mission-entity.type';
-import { CreateMissionInput } from './inputs/create-mission.input';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GqlAuthGuard } from '../../auth/guards/gql-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import { CreateMissionDto } from './dto/create-mission.dto';
 
 @Resolver(() => MissionCardType)
 export class MissionsResolver {
@@ -238,22 +238,30 @@ export class MissionsResolver {
   /**
    * ✅ Créer une mission (PRINCIPALE)
    */
-  @Mutation(() => MissionEntity)
-  async createMission(
-    @Args('input', { type: () => CreateMissionInput })
-    input: CreateMissionInput,
-  ): Promise<MissionEntity> {
-    console.log('🚀 Mutation: createMission');
+@Mutation(() => MissionEntity)
+async createMission(
+  @Args('input', { type: () => CreateMissionDto })
+  input: CreateMissionDto,
+): Promise<MissionEntity> {
+  console.log('🚀 Mutation: createMission');
 
-    if (!input) {
-      throw new BadRequestException('Input requis');
-    }
+  if (!input) throw new BadRequestException('Input requis');
 
-    // Convertir en CreateMissionDto si nécessaire
-    const result = await this.missionsService.creerMission(input as any);
-    return result;
-  }
+  const result = await this.missionsService.creerMission(input as any);
 
+  // Mapper agent depuis result.agent.user
+  return {
+    ...result,
+    agent: result.agent?.user ? {
+      id: result.agent.user.id,
+      email: result.agent.user.email,
+      nom: result.agent.user.adherent?.nom,
+      prenom: result.agent.user.adherent?.prenom,
+      telephone: result.agent.user.adherent?.telephone,
+      photo: result.agent.user.adherent?.photo,
+    } : null,
+  } as any;
+}
   // ─────────────────────────────────────────────────────────────
   //  RESOLVE FIELDS
   // ─────────────────────────────────────────────────────────────
