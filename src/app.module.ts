@@ -5,7 +5,7 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
 import * as admin from 'firebase-admin';
-import * as serviceAccount from '../firebase-service-account.json';
+import * as serviceAccount from '../movecar-65d1e-firebase-adminsdk-fbsvc-522d57c522.json';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
