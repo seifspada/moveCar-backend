@@ -391,12 +391,10 @@ async creerMission(
       console.log('✅ Aucun document fourni (optionnel)');
     }
 
-    // 15. ✅ CORRIGÉ : Vérifier les alertes
-    // ⚠️ checkAlertes est une fonction SERVICE — elle NE fait PAS d'appel GraphQL
-    // Elle récupère juste les alertes en BDD et envoie emails/push
-    console.log('🔔 Vérification des alertes...');
-    try {
-      await this.alertesService.checkAlertes({
+    // 15. Vérifier les alertes en arrière-plan.
+    // La création de mission ne doit pas attendre les emails/push.
+    console.log('🔔 Vérification des alertes en arrière-plan...');
+    void Promise.resolve(this.alertesService.checkAlertes({
         id: mission.id,
         adresseDepart,
         adresseArrivee,
@@ -406,13 +404,11 @@ async creerMission(
           fraisPeage:   calculRoute.fraisPeage,
           montantTotal: montantTotal,
         },
+      }))
+      .then(() => console.log('✅ Alertes vérifiées'))
+      .catch((alertError) => {
+        console.error('⚠️ Erreur lors de la vérification des alertes:', alertError);
       });
-      console.log('✅ Alertes vérifiées');
-    } catch (alertError) {
-      // ⚠️ On log l'erreur mais on ne faillit pas la mission
-      console.error('⚠️ Erreur lors de la vérification des alertes:', alertError);
-      // Ne pas throw — les alertes ne doivent pas bloquer la création de mission
-    }
 
     console.log('✅ Mission créée avec succès!');
     return this.obtenirMission(mission.id);
