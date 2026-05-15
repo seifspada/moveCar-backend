@@ -14,10 +14,10 @@ import { NotificationModule } from '../notification/notification.module';
     HttpModule,         // ← ajout
     NotificationModule,
   ],
+  controllers: [AlertesController],
   providers: [
     AlertesService,
     AlertesResolver,
-    AlertesController,
     PrismaService,
     EmailService,
     GeoService,
