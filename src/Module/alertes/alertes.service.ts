@@ -224,6 +224,16 @@ export class AlertesService {
       arrivee: `${mission.adresseArrivee.villeNom} (${mission.adresseArrivee.latitude}, ${mission.adresseArrivee.longitude})`,
     });
 
+    const summary = {
+      totalAlertes: 0,
+      matched: 0,
+      dejaNotifiees: 0,
+      emailsEnvoyes: 0,
+      pushEnvoyes: 0,
+      sansCanal: 0,
+      pushSansToken: 0,
+    };
+
     const disponibilite = await this.prisma.disponibiliteMission.findFirst({
       where: { missionId: mission.id },
     });
@@ -234,12 +244,23 @@ export class AlertesService {
     });
 
     console.log(`\n📋 ${alertes.length} alerte(s) trouvée(s)`);
+    summary.totalAlertes = alertes.length;
 
     for (const alerte of alertes) {
       console.log(`\n--- Alerte #${alerte.id} ---`);
       console.log('Type:', alerte.type);
       console.log('User:', alerte.user.email);
       console.log(`Canal: email=${alerte.emailActif} push=${alerte.pushActif}`);
+
+      if (!alerte.emailActif && !alerte.pushActif) {
+        summary.sansCanal += 1;
+        console.warn('⚠️ Aucun canal actif pour cette alerte: pas d’email ni push');
+      }
+
+      if (alerte.pushActif && !alerte.fcmToken) {
+        summary.pushSansToken += 1;
+        console.warn('⚠️ Push actif mais fcmToken absent: notification mobile impossible');
+      }
 
       let match = false;
 
@@ -322,6 +343,7 @@ export class AlertesService {
       }
 
       if (match) {
+        summary.matched += 1;
         console.log(`\n✅ MATCH! Notification à envoyer à ${alerte.user.email}`);
 
         const dejaNotifie = await this.prisma.notificationAlerte.findFirst({
@@ -329,6 +351,7 @@ export class AlertesService {
         });
 
         if (dejaNotifie) {
+          summary.dejaNotifiees += 1;
           console.log(`⚠️ Déjà notifié le ${dejaNotifie.dateEnvoi}`);
           continue;
         }
@@ -356,9 +379,10 @@ export class AlertesService {
                 );
               }
               emailEnvoye = true;
+              summary.emailsEnvoyes += 1;
               console.log('📧 ✅ Email envoyé!');
             } catch (emailErr) {
-              console.warn('📧 ⚠️ Erreur envoi email:', emailErr);
+              console.warn(`📧 ⚠️ Erreur envoi email à ${alerte.user.email}:`, emailErr);
             }
           }
 
@@ -372,9 +396,10 @@ export class AlertesService {
                   : `Mission ${alerte.villeDepartNom} → ${alerte.villeArriveeNom}`,
               );
               pushEnvoye = true;
+              summary.pushEnvoyes += 1;
               console.log('📱 ✅ Push envoyé!');
             } catch (pushErr) {
-              console.warn('📱 ⚠️ Erreur envoi push:', pushErr);
+              console.warn(`📱 ⚠️ Erreur envoi push pour alerte ${alerte.id}:`, pushErr);
             }
           }
 
@@ -396,7 +421,9 @@ export class AlertesService {
       }
     }
 
+    console.log('📊 Résumé alertes:', summary);
     console.log('\n🔍 ====================================\n');
+    return summary;
   }
 
   async getAlertesByUser(userId: number) {

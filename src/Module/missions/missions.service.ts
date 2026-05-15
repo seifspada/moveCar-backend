@@ -405,7 +405,7 @@ async creerMission(
           montantTotal: montantTotal,
         },
       }))
-      .then(() => console.log('✅ Alertes vérifiées'))
+      .then((alertesSummary) => console.log('✅ Alertes vérifiées:', alertesSummary))
       .catch((alertError) => {
         console.error('⚠️ Erreur lors de la vérification des alertes:', alertError);
       });
