@@ -541,7 +541,6 @@ async creerMission(
                   nom: true,
                   prenom: true,
                   telephone: true,
-                  photo: true,
                 },
               },
             },
