@@ -186,13 +186,11 @@ await app.register(fastifyCors as any, {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-      tagsSorter: 'alpha',
-      operationsSorter: 'alpha',
-    },
-  });
+SwaggerModule.setup('docs', app, document, { // ← 'api' → 'docs'
+  swaggerOptions: {
+    persistAuthorization: true,
+  },
+});
 
   const port = Number(process.env.PORT) || 10000;
   await app.listen(port, '0.0.0.0');
