@@ -115,15 +115,12 @@ export class AlertesService {
     const userName = user.adherent?.prenom || user.adherent?.nom || user.name || 'Adhérent';
 
     if (emailActif) {
-      console.log('📧 Envoi email de confirmation...');
-      try {
-        await this.emailService.sendConfirmationAlerteGeographique(
+      console.log('📧 Envoi email de confirmation en arrière-plan...');
+      void Promise.resolve(this.emailService.sendConfirmationAlerteGeographique(
           user.email, userName, villeNom, rayon,
-        );
-        console.log('✅ Email de confirmation envoyé');
-      } catch (emailError) {
-        console.warn('⚠️ Erreur envoi email:', emailError);
-      }
+        ))
+        .then(() => console.log('✅ Email de confirmation envoyé'))
+        .catch((emailError) => console.warn('⚠️ Erreur envoi email:', emailError));
     }
 
     if (pushActif) {
@@ -199,15 +196,12 @@ export class AlertesService {
     const userName = user.adherent?.prenom || user.adherent?.nom || user.name || 'Adhérent';
 
     if (emailActif) {
-      console.log('📧 Envoi email de confirmation...');
-      try {
-        await this.emailService.sendConfirmationAlerteTrajet(
+      console.log('📧 Envoi email de confirmation en arrière-plan...');
+      void Promise.resolve(this.emailService.sendConfirmationAlerteTrajet(
           user.email, userName, villeDepartNom, villeArriveeNom, rayon,
-        );
-        console.log('✅ Email de confirmation envoyé');
-      } catch (emailError) {
-        console.warn('⚠️ Erreur envoi email:', emailError);
-      }
+        ))
+        .then(() => console.log('✅ Email de confirmation envoyé'))
+        .catch((emailError) => console.warn('⚠️ Erreur envoi email:', emailError));
     }
 
     if (pushActif) {
