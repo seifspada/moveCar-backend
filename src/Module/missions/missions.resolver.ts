@@ -27,6 +27,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { GqlAuthGuard } from '../../auth/guards/gql-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { CreateMissionDto } from './dto/create-mission.dto';
+import { CreateMissionInput } from './inputs/create-mission.input';
 
 @Resolver(() => MissionCardType)
 export class MissionsResolver {
@@ -240,16 +241,12 @@ export class MissionsResolver {
    */
 @Mutation(() => MissionEntity)
 async createMission(
-  @Args('input', { type: () => CreateMissionDto })
-  input: CreateMissionDto,
+  @Args('input', { type: () => CreateMissionInput })  // ← CreateMissionInput
+  input: CreateMissionInput,
 ): Promise<MissionEntity> {
   console.log('🚀 Mutation: createMission');
-
   if (!input) throw new BadRequestException('Input requis');
-
   const result = await this.missionsService.creerMission(input as any);
-
-  // Mapper agent depuis result.agent.user
   return {
     ...result,
     agent: result.agent?.user ? {
@@ -258,7 +255,6 @@ async createMission(
       nom: result.agent.user.adherent?.nom,
       prenom: result.agent.user.adherent?.prenom,
       telephone: result.agent.user.adherent?.telephone,
-      photo: result.agent.user.adherent?.photo,
     } : null,
   } as any;
 }
