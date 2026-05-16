@@ -1,41 +1,21 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
 const SibApiV3Sdk = require('@getbrevo/brevo');
 
 @Injectable()
 export class EmailService implements OnModuleInit {
-  private transporter: nodemailer.Transporter;
-    private apiInstance: any;
-
+  private apiInstance: any;
 
   onModuleInit() {
-    this.transporter = nodemailer.createTransport({
-      host: 'smtp-relay.brevo.com',
-      port: 465,           // ✅ port 465 au lieu de 587
-      secure: true,        // ✅ SSL
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-    });
+    const defaultClient = SibApiV3Sdk.ApiClient.instance;
+    const apiKey = defaultClient.authentications['api-key'];
+    apiKey.apiKey = process.env.BREVO_API_KEY;
+    this.apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
-    console.log('📧 Transporter SMTP initialisé');
-    console.log('   host:', 'smtp-relay.brevo.com');
-    console.log('   user:', process.env.EMAIL_USER);
+    console.log('📧 Brevo API initialisée');
     console.log('   from_name:', process.env.EMAIL_FROM_NAME);
-
-    this.transporter.verify((error) => {
-      if (error) {
-        console.error('❌ SMTP verify failed:', error);
-      } else {
-        console.log('✅ SMTP prêt à envoyer des emails');
-      }
-    });
+    console.log('   sender:', process.env.ADMIN_EMAIL);
+    console.log('   api_key défini:', !!process.env.BREVO_API_KEY);
   }
-  
 
   async sendMail(options: { to: string; subject: string; html: string; text?: string }) {
     console.log('\n📧 ========== SENDMAIL APPELÉE ==========');
