@@ -1,43 +1,44 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-const SibApiV3Sdk = require('@getbrevo/brevo');
 
 @Injectable()
 export class EmailService implements OnModuleInit {
   private apiInstance: any;
 
-  onModuleInit() {
-    const defaultClient = SibApiV3Sdk.ApiClient.instance;
-    const apiKey = defaultClient.authentications['api-key'];
-    apiKey.apiKey = process.env.BREVO_API_KEY;
-    this.apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+onModuleInit() {
+  const brevo = require('@getbrevo/brevo');
+  const defaultClient = brevo.ApiClient.instance;
+  const apiKey = defaultClient.authentications['api-key'];
+  apiKey.apiKey = process.env.BREVO_API_KEY;
+  this.apiInstance = new brevo.TransactionalEmailsApi();
 
-    console.log('📧 Brevo API initialisée');
-    console.log('   from_name:', process.env.EMAIL_FROM_NAME);
-    console.log('   sender:', process.env.ADMIN_EMAIL);
-    console.log('   api_key défini:', !!process.env.BREVO_API_KEY);
+  console.log('📧 Brevo API initialisée');
+  console.log('   from_name:', process.env.EMAIL_FROM_NAME);
+  console.log('   api_key défini:', !!process.env.BREVO_API_KEY);
+}
+
+async sendMail(options: { to: string; subject: string; html: string; text?: string }) {
+  const brevo = require('@getbrevo/brevo');
+  
+  console.log('\n📧 ========== SENDMAIL APPELÉE ==========');
+  console.log('📧 to:', options.to);
+  console.log('📧 subject:', options.subject);
+
+  const sendSmtpEmail = new brevo.SendSmtpEmail();
+  sendSmtpEmail.to = [{ email: options.to }];
+  sendSmtpEmail.sender = { name: process.env.EMAIL_FROM_NAME || 'MoveCar', email: process.env.ADMIN_EMAIL };
+  sendSmtpEmail.subject = options.subject;
+  sendSmtpEmail.htmlContent = options.html;
+  sendSmtpEmail.textContent = options.text || '';
+
+  try {
+    const result = await this.apiInstance.sendTransacEmail(sendSmtpEmail);
+    console.log('✅ Email envoyé via Brevo API:', result.messageId);
+    return result;
+  } catch (error) {
+    console.error('❌ Erreur Brevo API:', error);
+    throw error;
   }
-
-  async sendMail(options: { to: string; subject: string; html: string; text?: string }) {
-    console.log('\n📧 ========== SENDMAIL APPELÉE ==========');
-    console.log('📧 to:', options.to);
-    console.log('📧 subject:', options.subject);
-
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-    sendSmtpEmail.to = [{ email: options.to }];
-    sendSmtpEmail.sender = { name: process.env.EMAIL_FROM_NAME || 'MoveCar', email: process.env.ADMIN_EMAIL };
-    sendSmtpEmail.subject = options.subject;
-    sendSmtpEmail.htmlContent = options.html;
-    sendSmtpEmail.textContent = options.text || '';
-
-    try {
-      const result = await this.apiInstance.sendTransacEmail(sendSmtpEmail);
-      console.log('✅ Email envoyé via Brevo API:', result.messageId);
-      return result;
-    } catch (error) {
-      console.error('❌ Erreur Brevo API:', error);
-      throw error;
-    }
-  }
+}
 
 
 
