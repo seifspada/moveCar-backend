@@ -276,6 +276,7 @@ async creerMission(
           longitude:       villeDepart.longitude,
         },
       }),
+      
       this.prisma.adresse.create({
         data: {
           villeId:         villeArrivee.codeInsee,
@@ -288,7 +289,8 @@ async creerMission(
         },
       }),
     ]);
-
+console.log('📍 adresseDepart:', adresseDepart.latitude, adresseDepart.longitude);
+console.log('📍 adresseArrivee:', adresseArrivee.latitude, adresseArrivee.longitude);
     // 9. Créer la mission
     console.log('📝 Création de la mission...');
     const mission = await this.prisma.mission.create({
