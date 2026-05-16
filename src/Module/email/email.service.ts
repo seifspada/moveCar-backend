@@ -1,13 +1,12 @@
-// src/email/email.service.ts
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleInit } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
-import { ConfigService } from '@nestjs/config';
 
 @Injectable()
-export class EmailService {
+export class EmailService implements OnModuleInit {
   private transporter: nodemailer.Transporter;
 
-  constructor() {
+  onModuleInit() {
+    // ✅ Créé après chargement des variables d'environnement
     this.transporter = nodemailer.createTransport({
       host: process.env.EMAIL_HOST,
       port: parseInt(process.env.EMAIL_PORT || '587'),
@@ -17,56 +16,57 @@ export class EmailService {
         pass: process.env.EMAIL_PASS,
       },
       tls: {
-    rejectUnauthorized: false,  // <-- AJOUTEZ CETTE LIGNE
-  },
+        rejectUnauthorized: false,
+      },
     });
+
+    console.log('📧 Transporter SMTP initialisé');
+    console.log('   host:', process.env.EMAIL_HOST);
+    console.log('   user:', process.env.EMAIL_USER);
+    console.log('   from_name:', process.env.EMAIL_FROM_NAME);
   }
 
-// src/Module/email/email.service.ts
+  async sendMail(options: {
+    to: string;
+    subject: string;
+    html: string;
+    text?: string;
+  }) {
+    console.log('\n📧 ========== SENDMAIL APPELÉE ==========');
+    console.log('📧 options.to reçu:', options.to);
+    console.log('📧 options.subject:', options.subject);
 
-// src/Module/email/email.service.ts
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      text: options.text || '',
+    };
 
-async sendMail(options: {
-  to: string;
-  subject: string;
-  html: string;
-  text?: string;
-}) {
-  console.log('\n📧 ========== SENDMAIL APPELÉE ==========');
-  console.log('📧 options.to reçu:', options.to);  // ✅ REGARDE CE LOG
-  console.log('📧 options.subject:', options.subject);
+    console.log('📬 mailOptions construit:');
+    console.log('   from:', mailOptions.from);
+    console.log('   to:', mailOptions.to);
+    console.log('   subject:', mailOptions.subject);
 
-  // Construire l'objet mail
-  const mailOptions = {
-    from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
-    to: options.to,
-    subject: options.subject,
-    html: options.html,
-    text: options.text || '',
-  };
+    console.log('📤 Envoi via nodemailer...');
 
-  console.log('📬 mailOptions construit:');
-  console.log('   from:', mailOptions.from);
-  console.log('   to:', mailOptions.to);  // ✅ REGARDE CE LOG
-  console.log('   subject:', mailOptions.subject);
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
 
-  console.log('📤 Envoi via nodemailer...');
+      console.log('✅ Nodemailer a envoyé l\'email');
+      console.log('   accepted:', info.accepted);
+      console.log('   rejected:', info.rejected);
+      console.log('   messageId:', info.messageId);
+      console.log('📧 ========================================\n');
 
-  try {
-    const info = await this.transporter.sendMail(mailOptions);
-
-    console.log('✅ Nodemailer a envoyé l\'email');
-    console.log('   accepted:', info.accepted);  // ✅ REGARDE CE LOG
-    console.log('   rejected:', info.rejected);
-    console.log('   messageId:', info.messageId);
-    console.log('📧 ========================================\n');
-
-    return info;
-  } catch (error) {
-    console.error('❌ Erreur nodemailer:', error);
-    throw error;
+      return info;
+    } catch (error) {
+      console.error('❌ Erreur nodemailer:', error);
+      throw error;
+    }
   }
-}
+
 
   // Méthode spécifique pour reset password
 
