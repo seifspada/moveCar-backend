@@ -1,83 +1,65 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
+const SibApiV3Sdk = require('@getbrevo/brevo');
 
 @Injectable()
 export class EmailService implements OnModuleInit {
   private transporter: nodemailer.Transporter;
+    private apiInstance: any;
 
-onModuleInit() {
-  this.transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT || '587'),
-    secure: process.env.EMAIL_SECURE === 'true',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-    tls: {
-      rejectUnauthorized: false,
-    },
-    // ✅ Ajoutez ces timeouts
-    connectionTimeout: 10000,  // 10 secondes
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-  });
 
-  console.log('📧 Transporter SMTP initialisé');
-  console.log('   host:', process.env.EMAIL_HOST);
-  console.log('   user:', process.env.EMAIL_USER);
-  console.log('   from_name:', process.env.EMAIL_FROM_NAME);
+  onModuleInit() {
+    this.transporter = nodemailer.createTransport({
+      host: 'smtp-relay.brevo.com',
+      port: 465,           // ✅ port 465 au lieu de 587
+      secure: true,        // ✅ SSL
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+      tls: {
+        rejectUnauthorized: false,
+      },
+    });
 
-  // ✅ Vérifier la connexion au démarrage
-  this.transporter.verify((error, success) => {
-    if (error) {
-      console.error('❌ SMTP verify failed:', error);
-    } else {
-      console.log('✅ SMTP prêt à envoyer des emails');
-    }
-  });
-}
+    console.log('📧 Transporter SMTP initialisé');
+    console.log('   host:', 'smtp-relay.brevo.com');
+    console.log('   user:', process.env.EMAIL_USER);
+    console.log('   from_name:', process.env.EMAIL_FROM_NAME);
 
-  async sendMail(options: {
-    to: string;
-    subject: string;
-    html: string;
-    text?: string;
-  }) {
+    this.transporter.verify((error) => {
+      if (error) {
+        console.error('❌ SMTP verify failed:', error);
+      } else {
+        console.log('✅ SMTP prêt à envoyer des emails');
+      }
+    });
+  }
+  
+
+  async sendMail(options: { to: string; subject: string; html: string; text?: string }) {
     console.log('\n📧 ========== SENDMAIL APPELÉE ==========');
-    console.log('📧 options.to reçu:', options.to);
-    console.log('📧 options.subject:', options.subject);
+    console.log('📧 to:', options.to);
+    console.log('📧 subject:', options.subject);
 
-    const mailOptions = {
-      from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text || '',
-    };
-
-    console.log('📬 mailOptions construit:');
-    console.log('   from:', mailOptions.from);
-    console.log('   to:', mailOptions.to);
-    console.log('   subject:', mailOptions.subject);
-
-    console.log('📤 Envoi via nodemailer...');
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.to = [{ email: options.to }];
+    sendSmtpEmail.sender = { name: process.env.EMAIL_FROM_NAME || 'MoveCar', email: process.env.ADMIN_EMAIL };
+    sendSmtpEmail.subject = options.subject;
+    sendSmtpEmail.htmlContent = options.html;
+    sendSmtpEmail.textContent = options.text || '';
 
     try {
-      const info = await this.transporter.sendMail(mailOptions);
-
-      console.log('✅ Nodemailer a envoyé l\'email');
-      console.log('   accepted:', info.accepted);
-      console.log('   rejected:', info.rejected);
-      console.log('   messageId:', info.messageId);
-      console.log('📧 ========================================\n');
-
-      return info;
+      const result = await this.apiInstance.sendTransacEmail(sendSmtpEmail);
+      console.log('✅ Email envoyé via Brevo API:', result.messageId);
+      return result;
     } catch (error) {
-      console.error('❌ Erreur nodemailer:', error);
+      console.error('❌ Erreur Brevo API:', error);
       throw error;
     }
   }
+
+
 
 
   // Méthode spécifique pour reset password

@@ -52,6 +52,29 @@ type AgentPublic {
   prenom: String!
 }
 
+type AlerteGeographique {
+  actif: Boolean!
+  dateCreation: DateTime!
+  dateDepart: DateTime
+  dateDepartMax: DateTime
+  emailActif: Boolean!
+  fcmToken: String
+  id: ID!
+  latitude: Float
+  latitudeArrivee: Float
+  latitudeDepart: Float
+  longitude: Float
+  longitudeArrivee: Float
+  longitudeDepart: Float
+  pushActif: Boolean!
+  rayon: Int!
+  type: String!
+  userId: Int!
+  villeArriveeNom: String
+  villeDepartNom: String
+  villeNom: String
+}
+
 enum BoiteVitesse {
   AUTOMATIQUE
   MANUELLE
@@ -62,6 +85,60 @@ type CalculEntity {
   fraisPeage: Float!
   id: String!
   montantTotal: Float!
+}
+
+input CreateAlerteGeographiqueInput {
+  dateDepart: String
+  dateDepartMax: String
+  emailActif: Boolean
+  fcmToken: String
+  latitude: Float!
+  longitude: Float!
+  pushActif: Boolean
+  rayon: Int!
+  villeNom: String!
+}
+
+input CreateAlerteTrajetInput {
+  dateDepart: String
+  dateDepartMax: String
+  emailActif: Boolean
+  fcmToken: String
+  latitudeArrivee: Float!
+  latitudeDepart: Float!
+  longitudeArrivee: Float!
+  longitudeDepart: Float!
+  pushActif: Boolean
+  rayon: Int!
+  villeArriveeNom: String!
+  villeDepartNom: String!
+}
+
+input CreateMissionInput {
+  adresseArriveeComplete: String!
+  adresseDepartComplete: String!
+  agentId: Int!
+  boiteVitesse: String!
+  commentaire: String
+  dateDebut: String!
+  dateFin: String!
+  immatriculation: String!
+  marqueModele: String!
+  nomContactArrivee: String
+  nomContactDepart: String
+  nomLieuArrivee: String
+  nomLieuDepart: String
+  nombrePlaces: Int!
+  notifierArrivee: Boolean
+  notifierDepart: Boolean
+  telephoneContactArrivee: String
+  telephoneContactDepart: String
+  typeCarburant: String!
+  typeLieuArrivee: String!
+  typeLieuDepart: String!
+  typeVehicule: String!
+  villeArrivee: String!
+  villeDepart: String!
 }
 
 input CreateReservationInput {
@@ -129,7 +206,7 @@ input InspectionFilterInput {
 }
 
 type MissionCardType {
-  dateDebut: DateTime!
+  dateDebut: DateTime
   dateDepartMax: DateTime
   distanceKm: Float!
   fraisPeage: Float!
@@ -172,6 +249,7 @@ type Mutation {
 
   """Accepter une réservation EN_ATTENTE (agent — étape 1)"""
   acceptReservation(id: String!): ReservationMissionEntity!
+  activerAlerte(id: String!): AlerteGeographique!
 
   """
   Annuler une réservation EN_ATTENTE sans motif — agent non répondant (adhérent)
@@ -183,9 +261,14 @@ type Mutation {
 
   """Confirmer une réservation acceptée par l'agent (adhérent — étape 2)"""
   confirmReservationByAdherent(id: String!): ReservationMissionEntity!
+  createAlerteGeographique(input: CreateAlerteGeographiqueInput!): AlerteGeographique!
+  createAlerteTrajet(input: CreateAlerteTrajetInput!): AlerteGeographique!
+  createMission(input: CreateMissionInput!): MissionEntity!
 
   """Créer une nouvelle réservation de mission (adhérent)"""
   createReservation(input: CreateReservationInput!): ReservationResponse!
+  desactiverMesAlertes: Boolean!
+  modifierRayonAlerte(id: String!, rayon: Int!): AlerteGeographique!
 
   """Refuser une demande d'annulation (agent)"""
   refuseCancellationRequest(id: String!, motifRefus: String!): ReservationMissionEntity!
@@ -201,9 +284,21 @@ type Mutation {
 
   """Soumet le consentement de l'adhérent (étape 6)"""
   submitConsent(input: SubmitConsentInput!): PreTripInspection!
+  supprimerAlerte(id: String!): Boolean!
 
   """Valide l'inspection finale et démarre la mission"""
   validateAndStartMission(input: ValidateInspectionInput!): PreTripInspection!
+}
+
+type NotificationAlerte {
+  alerte: AlerteGeographique
+  alerteId: String!
+  dateCreation: DateTime!
+  dateEnvoi: DateTime
+  emailEnvoye: Boolean!
+  id: ID!
+  missionId: String!
+  pushEnvoye: Boolean!
 }
 
 type NotificationEntity {
@@ -212,6 +307,11 @@ type NotificationEntity {
   nomContact: String
   telephoneContact: String
   typeNotification: String!
+}
+
+type ParTypeAlertes {
+  geographiques: Int!
+  trajets: Int!
 }
 
 type PartenaireNavbar {
@@ -325,6 +425,9 @@ type Query {
 
   """Récupérer toutes les réservations (admin/agent)"""
   allReservations: [ReservationMissionEntity!]!
+  checkNouvellesMissions: [AlerteGeographique!]!
+  getAlerteById(id: String!): AlerteGeographique
+  getAllAlertes: [AlerteGeographique!]!
 
   """Récupère l'inspection d'une réservation"""
   getInspectionByReservation(reservationId: ID!): PreTripInspection
@@ -335,6 +438,9 @@ type Query {
 
   """Toutes les missions sans filtre (admin/agent)"""
   getMissionsForCardsByAgence: [MissionCardType!]!
+  getMyAlertes: [AlerteGeographique!]!
+  getMyNotificationsHistory(limit: Int = 50): [NotificationAlerte!]!
+  getStatsAlertes: StatsAlertes!
 
   """Liste les inspections (filtrage par rôle automatique)"""
   listInspections(filter: InspectionFilterInput): [PreTripInspection!]!
@@ -432,6 +538,13 @@ input StartInspectionInput {
 
   """ID de la réservation à inspecter"""
   reservationId: String!
+}
+
+type StatsAlertes {
+  actives: Int!
+  inactives: Int!
+  parType: ParTypeAlertes!
+  total: Int!
 }
 
 enum StatutMission {

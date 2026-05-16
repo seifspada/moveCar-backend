@@ -26,6 +26,7 @@
     "@fastify/cors": "^11.2.0",
     "@fastify/multipart": "^9.4.0",
     "@fastify/static": "^9.0.0",
+    "@getbrevo/brevo": "^5.0.4",
     "@nestjs/apollo": "^13.2.3",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
