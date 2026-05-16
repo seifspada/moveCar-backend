@@ -387,21 +387,46 @@ export class AlertesService {
           }
 
           if (alerte.pushActif && alerte.fcmToken) {
-            try {
-              await this.notificationService.sendPushNotification(
-                alerte.fcmToken,
-                'Nouvelle mission disponible',
-                alerte.type === TypeAlerte.GEOGRAPHIQUE
-                  ? `Mission près de ${alerte.villeNom}`
-                  : `Mission ${alerte.villeDepartNom} → ${alerte.villeArriveeNom}`,
-              );
-              pushEnvoye = true;
-              summary.pushEnvoyes += 1;
-              console.log('📱 ✅ Push envoyé!');
-            } catch (pushErr) {
-              console.warn(`📱 ⚠️ Erreur envoi push pour alerte ${alerte.id}:`, pushErr);
-            }
-          }
+  try {
+    console.log(`📱 Envoi push à: ${alerte.fcmToken.substring(0, 20)}...`);
+    
+    await this.notificationService.sendPushNotification(
+      alerte.fcmToken,
+      'Nouvelle mission disponible ! 🚗',
+      alerte.type === TypeAlerte.GEOGRAPHIQUE
+        ? `Mission près de ${alerte.villeNom} (${alerte.rayon}km)`
+        : `Mission ${alerte.villeDepartNom} → ${alerte.villeArriveeNom}`,
+      {
+        missionId: mission.id.toString(),
+        type: alerte.type,
+        villeDepart: mission.adresseDepart.villeNom,
+        villeArrivee: mission.adresseArrivee.villeNom,
+        alerteId: alerte.id,
+      }
+    );
+    
+    pushEnvoye = true;
+    summary.pushEnvoyes += 1;
+    console.log('📱 ✅ Push envoyé avec succès!');
+  } catch (pushErr: any) {
+    console.warn(`📱 ⚠️ Erreur envoi push pour alerte ${alerte.id}:`, pushErr.message);
+    
+    // ✅ Si token invalide, désactiver le push pour cette alerte
+    if (pushErr.code === 'messaging/invalid-registration-token' || 
+        pushErr.message.includes('invalid-registration-token')) {
+      console.warn(`🗑️ Token invalide, désactivation du push pour l'alerte ${alerte.id}`);
+      try {
+        await this.prisma.alerteGeographique.update({
+          where: { id: alerte.id },
+          data: { pushActif: false },
+        });
+      } catch (updateErr) {
+        console.error('❌ Erreur désactivation push:', updateErr);
+      }
+    }
+  }
+}
+ 
 
           await this.prisma.notificationAlerte.create({
             data: {
@@ -432,6 +457,115 @@ export class AlertesService {
       orderBy: { dateCreation: 'desc' },
     });
   }
+
+
+  async updateFcmToken(userId: number, fcmToken: string) {
+  console.log(`\n🔄 Mise à jour FCM Token pour utilisateur ${userId}`);
+  console.log(`Token: ${fcmToken.substring(0, 20)}...`);
+ 
+  // ✅ Valider le token
+  if (!fcmToken || fcmToken.trim().length === 0) {
+    throw new Error('FCM Token invalide');
+  }
+ 
+  try {
+    // Vérifier si l'utilisateur a une alerte active
+    const alerte = await this.prisma.alerteGeographique.findFirst({
+      where: { userId, actif: true },
+    });
+ 
+    if (!alerte) {
+      console.log(`⚠️ Aucune alerte active pour l'utilisateur ${userId}`);
+      return { success: false, message: 'Aucune alerte active' };
+    }
+ 
+    // Mettre à jour le token
+    const updated = await this.prisma.alerteGeographique.update({
+      where: { id: alerte.id },
+      data: { fcmToken },
+    });
+ 
+    console.log(`✅ Token mis à jour pour l'alerte ${alerte.id}`);
+    return {
+      success: true,
+      alerteId: updated.id,
+      message: 'Token FCM mis à jour',
+    };
+  } catch (error: any) {
+    console.error(`❌ Erreur mise à jour token:`, error);
+    throw error;
+  }
+}
+ 
+/**
+ * ✅ Récupérer toutes les alertes avec tokens pour un utilisateur
+ */
+async getAlertesByUserWithTokens(userId: number) {
+  return await this.prisma.alerteGeographique.findMany({
+    where: { userId, actif: true },
+    select: {
+      id: true,
+      type: true,
+      villeNom: true,
+      villeDepartNom: true,
+      villeArriveeNom: true,
+      pushActif: true,
+      emailActif: true,
+      fcmToken: true,
+      dateCreation: true,
+    },
+    orderBy: { dateCreation: 'desc' },
+  });
+}
+ 
+/**
+ * ✅ Valider tous les tokens Firebase
+ */
+async validateAllTokens() {
+  console.log('\n🔍 Validation de tous les tokens FCM...');
+ 
+  const alertes = await this.prisma.alerteGeographique.findMany({
+    where: { pushActif: true, fcmToken: { not: null } },
+  });
+ 
+  const results = {
+    total: alertes.length,
+    valides: 0,
+    invalides: 0,
+    tokens: [] as any[],
+  };
+ 
+  for (const alerte of alertes) {
+    if (!alerte.fcmToken) continue;
+ 
+    try {
+      const isValid = await this.notificationService.isTokenValid(alerte.fcmToken);
+      
+      if (isValid) {
+        results.valides++;
+      } else {
+        results.invalides++;
+        // Désactiver le push
+        await this.prisma.alerteGeographique.update({
+          where: { id: alerte.id },
+          data: { pushActif: false },
+        });
+        console.log(`🗑️ Token invalide désactivé: ${alerte.id}`);
+      }
+ 
+      results.tokens.push({
+        alerteId: alerte.id,
+        valide: isValid,
+      });
+    } catch (error: any) {
+      console.warn(`⚠️ Erreur validation token ${alerte.id}:`, error.message);
+    }
+  }
+ 
+  console.log(`✅ Validation terminée: ${results.valides} valides, ${results.invalides} invalides`);
+  return results;
+}
+ 
 
   async getAlerteById(alerteId: string) {
     return await this.prisma.alerteGeographique.findUnique({
