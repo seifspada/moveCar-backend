@@ -46,11 +46,10 @@ export class EmailService implements OnModuleInit {
 
 
 async sendPasswordResetCode(email: string, code: string): Promise<void> {
-  await this.transporter.sendMail({
-    from: `"${process.env.EMAIL_FROM_NAME}" <${process.env.EMAIL_USER}>`,
-    to: email,
-    subject: 'Code de réinitialisation de mot de passe',
-    html: `
+await this.sendMail({
+  to: email,
+  subject: 'Code de réinitialisation de mot de passe',
+  html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2>Réinitialisation de mot de passe</h2>
         <p>Voici votre code de vérification :</p>
@@ -325,12 +324,11 @@ async sendProfileCreationLink(email: string, nom: string, profileUrl: string) {
     </div>
   `;
 
-  await this.transporter.sendMail({
-    from: process.env.EMAIL_FROM_NAME + ' <' + process.env.EMAIL_USER + '>', // ✅ Ou directement
-    to: email,
-    subject,
-    html,
-  });
+await this.sendMail({
+  to: email,
+  subject,
+  html,
+});
 }
 //email envoie pour la partenaire :
 // src/email/email.service.ts
@@ -882,21 +880,10 @@ async sendAcceptationPartenaireAvecProfil(data: {
     </html>
   `;
 
-await this.transporter.sendMail({
-  from: {
-    name: process.env.EMAIL_FROM_NAME,   // "Revolution"
-    address: process.env.SMTP_FROM,      // ton email technique
-  },
+await this.sendMail({
   to: data.email,
   subject,
   html,
-  attachments: [
-    {
-      filename: data.contratName,
-      path: data.contratPath,
-      contentType: 'application/pdf',
-    },
-  ],
 });
 
 }
