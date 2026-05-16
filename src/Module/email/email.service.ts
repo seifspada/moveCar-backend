@@ -5,26 +5,38 @@ import * as nodemailer from 'nodemailer';
 export class EmailService implements OnModuleInit {
   private transporter: nodemailer.Transporter;
 
-  onModuleInit() {
-    // ✅ Créé après chargement des variables d'environnement
-    this.transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST,
-      port: parseInt(process.env.EMAIL_PORT || '587'),
-      secure: process.env.EMAIL_SECURE === 'true',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-    });
+onModuleInit() {
+  this.transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: parseInt(process.env.EMAIL_PORT || '587'),
+    secure: process.env.EMAIL_SECURE === 'true',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
+    },
+    tls: {
+      rejectUnauthorized: false,
+    },
+    // ✅ Ajoutez ces timeouts
+    connectionTimeout: 10000,  // 10 secondes
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+  });
 
-    console.log('📧 Transporter SMTP initialisé');
-    console.log('   host:', process.env.EMAIL_HOST);
-    console.log('   user:', process.env.EMAIL_USER);
-    console.log('   from_name:', process.env.EMAIL_FROM_NAME);
-  }
+  console.log('📧 Transporter SMTP initialisé');
+  console.log('   host:', process.env.EMAIL_HOST);
+  console.log('   user:', process.env.EMAIL_USER);
+  console.log('   from_name:', process.env.EMAIL_FROM_NAME);
+
+  // ✅ Vérifier la connexion au démarrage
+  this.transporter.verify((error, success) => {
+    if (error) {
+      console.error('❌ SMTP verify failed:', error);
+    } else {
+      console.log('✅ SMTP prêt à envoyer des emails');
+    }
+  });
+}
 
   async sendMail(options: {
     to: string;
