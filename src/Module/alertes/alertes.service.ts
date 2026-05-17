@@ -88,10 +88,12 @@ export class AlertesService {
 
     console.log('👤 Utilisateur trouvé:', user.email);
 
+    // ✅ Supprimer TOUTES les alertes de l'utilisateur (pas seulement GEOGRAPHIQUE)
+    //    pour éviter qu'une ancienne alerte TRAJET avec un canal différent coexiste
     const deleteResult = await this.prisma.alerteGeographique.deleteMany({
-      where: { userId, type: TypeAlerte.GEOGRAPHIQUE },
+      where: { userId },
     });
-    console.log(`🗑️ ${deleteResult.count} alerte(s) géographique(s) supprimée(s)`);
+    console.log(`🗑️ ${deleteResult.count} alerte(s) précédente(s) supprimée(s)`);
 
     const alerte = await this.prisma.alerteGeographique.create({
       data: {
@@ -166,10 +168,12 @@ export class AlertesService {
 
     console.log('👤 Utilisateur trouvé:', user.email);
 
+    // ✅ Supprimer TOUTES les alertes de l'utilisateur (pas seulement TRAJET)
+    //    pour éviter qu'une ancienne alerte GEOGRAPHIQUE avec un canal différent coexiste
     const deleteResult = await this.prisma.alerteGeographique.deleteMany({
-      where: { userId, type: TypeAlerte.TRAJET },
+      where: { userId },
     });
-    console.log(`🗑️ ${deleteResult.count} alerte(s) trajet supprimée(s)`);
+    console.log(`🗑️ ${deleteResult.count} alerte(s) précédente(s) supprimée(s)`);
 
     const alerte = await this.prisma.alerteGeographique.create({
       data: {
@@ -238,12 +242,23 @@ export class AlertesService {
       where: { missionId: mission.id },
     });
 
-    const alertes = await this.prisma.alerteGeographique.findMany({
+    const allAlertes = await this.prisma.alerteGeographique.findMany({
       where: { actif: true },
       include: { user: { include: { adherent: true } } },
+      orderBy: { dateCreation: 'desc' },
     });
 
-    console.log(`\n📋 ${alertes.length} alerte(s) trouvée(s)`);
+    // ✅ Dédupliquer par userId : garder uniquement l'alerte la plus récente par user
+    //    pour éviter qu'un user avec 2 alertes (GEO + TRAJET) reçoive email + push
+    const alertesByUser = new Map<number, typeof allAlertes[0]>();
+    for (const alerte of allAlertes) {
+      if (!alertesByUser.has(alerte.userId)) {
+        alertesByUser.set(alerte.userId, alerte);
+      }
+    }
+    const alertes = Array.from(alertesByUser.values());
+
+    console.log(`\n📋 ${allAlertes.length} alerte(s) trouvée(s), ${alertes.length} après déduplication par user`);
     summary.totalAlertes = alertes.length;
 
     for (const alerte of alertes) {
