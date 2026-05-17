@@ -10,6 +10,7 @@ import { StatsAlertes } from './types/stats-alertes.type';
 import { NotificationAlerte } from './types/notification-alerte.type';
 import { CreateAlerteGeographiqueInput } from './dto/create-alerte-geographique.input';
 import { CreateAlerteTrajetInput } from './dto/create-alerte-trajet.input';
+import { ValidateTokensResult } from './types/validate-tokens-result.type';
 
 @Resolver(() => AlerteGeographique)
 export class AlertesResolver {
@@ -104,7 +105,7 @@ export class AlertesResolver {
   /**
    * ✅ [ADMIN] Valider tous les tokens Firebase
    */
-  @Query(() => Object, { description: '[ADMIN] Valider tous les tokens Firebase Cloud Messaging' })
+  @Query(() => ValidateTokensResult, { description: '[ADMIN] Valider tous les tokens Firebase Cloud Messaging' })
   @UseGuards(GqlAuthGuard)
   async validateAllFcmTokens(@CurrentUser() user: any) {
     const userId = user?.id || user?.sub;
