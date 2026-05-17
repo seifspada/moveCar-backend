@@ -45,7 +45,7 @@ export class AlertesResolver {
   /**
    * ✅ Récupérer MES alertes AVEC tokens FCM
    */
-  @Query(() => [Object], { 
+  @Query(() => [AlerteGeographique], { 
     description: 'Récupérer toutes mes alertes avec les tokens FCM' 
   })
   @UseGuards(GqlAuthGuard)
