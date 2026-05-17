@@ -123,7 +123,7 @@ export class NotificationService {
         },
       };
 
-      const response = await admin.messaging().sendMulticast(message);
+      const response = await admin.messaging().sendEachForMulticast(message);
       this.logger.log(`✅ Batch envoyé: ${response.successCount} succès, ${response.failureCount} échecs`);
       
       return {
