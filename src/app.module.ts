@@ -29,6 +29,7 @@ import { DocumentProcessingModule } from './Module/document-processing/document-
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { PreTripInspectionModule } from './Module/pretrip-inspection/pretrip-inspection.module';
 import { NotificationModule } from './Module/notification/notification.module';
+import { MissionSessionModule } from './Module/mission-session/mission-session.module';
 
 // ✅ Initialisation Firebase Admin (une seule fois au démarrage)
 if (!admin.apps.length) {
@@ -83,6 +84,7 @@ if (!admin.apps.length) {
     DocumentProcessingModule,
     PreTripInspectionModule,
     NotificationModule,
+    MissionSessionModule,
   ],
   controllers: [AppController],
   providers: [AppService],
