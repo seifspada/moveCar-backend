@@ -171,7 +171,7 @@ export class PreTripInspectionService {
       this.logger.warn(
         `Anti-fraude rejet ${inspectionId}/${typeMedia} : ${antiFraud.reasons.join(', ')}`,
       );
-      throw new BadRequestException(`Photo refusée : ${antiFraud.reasons.join(', ')}`);
+      //throw new BadRequestException(`Photo refusée : ${antiFraud.reasons.join(', ')}`);
     }
 
     const cheminFichier = await this.saveMediaFile(inspectionId, typeMedia, file, mimeType);

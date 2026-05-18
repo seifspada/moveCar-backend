@@ -1,3 +1,5 @@
+
+//pretrip
 import { Field, Float, ID, Int, ObjectType } from '@nestjs/graphql';
 import { EtapeInspection, StatutPreTripInspection, TypeMediaInspection } from '../enum/pretrip-inspection.enums';
 
