@@ -1,0 +1,72 @@
+// src/Module/mission-session/entities/mission-session.entity.ts
+
+import { Field, Float, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
+import { StatutSession as PrismaStatutSession } from '@prisma/client'; // ✅ IMPORT
+
+// ✅ Utiliser directement l'enum Prisma
+export enum StatutSession {
+  EN_COURS  = 'EN_COURS',
+  TERMINEE  = 'TERMINEE',
+}
+
+registerEnumType(StatutSession, { name: 'StatutSession' });
+
+@ObjectType('MissionSession')
+export class MissionSessionEntity {
+  @Field(() => ID)
+  id: string;
+
+  // ── Relations ──────────────────────────
+  @Field()
+  reservationId: string;
+
+  @Field()
+  missionId: string;
+
+  // ── Consentement ───────────────────────
+  @Field(() => Boolean)
+  consentAccepted: boolean;
+
+  @Field()
+  dateConsentement: Date;
+
+  // ── Démarrage ──────────────────────────
+  @Field(() => Float)
+  latitudeDebut: number;
+
+  @Field(() => Float)
+  longitudeDebut: number;
+
+  @Field()
+  dateDebut: Date;
+
+  @Field(() => Int, { nullable: true })
+  kilometrageDebut?: number | null;
+
+  // ── Fin ────────────────────────────────
+  @Field(() => Float, { nullable: true })
+  latitudeFin?: number | null;
+
+  @Field(() => Float, { nullable: true })
+  longitudeFin?: number | null;
+
+  @Field({ nullable: true })
+  dateFin?: Date | null;
+
+  @Field(() => Int, { nullable: true })
+  kilometrageFin?: number | null;
+
+  @Field({ nullable: true })
+  commentaireFin?: string | null;
+
+  // ── Statut ─────────────────────────────
+  @Field(() => StatutSession)
+  statut: StatutSession; // ✅ Type cohérent
+
+  // ── Traçabilité ────────────────────────
+  @Field()
+  dateCreation: Date;
+
+  @Field()
+  dateModification: Date;
+}
