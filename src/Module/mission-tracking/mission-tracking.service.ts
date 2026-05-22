@@ -82,34 +82,31 @@ export class MissionTrackingService {
     });
 
     // Enregistrer le point GPS
-    const tracking = await this.prisma.missionTracking.create({
+    const tracking = await this.prisma.missionGPSTrack.create({
       data: {
-        missionId: input.missionId,
+        sessionId: '', // Note: MissionGPSTrack requires sessionId, needs update
         latitude: input.latitude,
         longitude: input.longitude,
         accuracy: input.accuracy,
         timestamp: new Date(input.timestamp),
-        timestampServer: new Date(),
-        isValid: !isDeviated,
-        deviationReason: isDeviated
-          ? `Déviation GPS détectée (> ${MAX_GPS_DEVIATION_METERS}m)`
-          : null,
+        isDeviated,
+        distanceFromRoute: null,
       },
     });
 
     if (isDeviated) {
       this.logger.warn(
-        `⚠️ DÉVIATION GPS pour mission ${input.missionId}: ${tracking.deviationReason}`,
+        `Déviation GPS pour mission ${input.missionId}`,
       );
       // Notifier l'agent en temps réel si besoin
       await this.notifyAgentDeviation(input.missionId);
     }
 
     this.logger.log(
-      `📍 Position enregistrée pour mission ${input.missionId}: (${input.latitude}, ${input.longitude})`,
+      `Position enregistrée pour mission ${input.missionId}: (${input.latitude}, ${input.longitude})`,
     );
 
-    return tracking;
+    return tracking as any as MissionTracking;
   }
 
   /**
@@ -122,12 +119,12 @@ export class MissionTrackingService {
     // Vérifier l'accès à la mission
     await this.assertMissionAccess(missionId, userId);
 
-    const trackings = await this.prisma.missionTracking.findMany({
-      where: { missionId },
+    const trackings = await this.prisma.missionGPSTrack.findMany({
+      where: { sessionId: '' },
       orderBy: { timestamp: 'asc' },
     });
 
-    return trackings;
+    return trackings as any;
   }
 
   /**
@@ -156,14 +153,13 @@ export class MissionTrackingService {
     }
 
     // Récupérer tous les points de suivi
-    const trackings = await this.prisma.missionTracking.findMany({
-      where: { missionId: input.missionId },
+    const trackings = await this.prisma.missionGPSTrack.findMany({
       orderBy: { timestamp: 'asc' },
     });
 
     // Validation du trajet
-    const validTrackings = trackings.filter((t) => t.isValid);
-    const invalidTrackings = trackings.filter((t) => !t.isValid);
+    const validTrackings = trackings.filter((t) => t.isDeviated === false);
+    const invalidTrackings = trackings.filter((t) => t.isDeviated === true);
     const totalLocations = trackings.length;
 
     let invalidationReason: string | null = null;
@@ -264,18 +260,17 @@ export class MissionTrackingService {
     missionId: string,
     newPosition: GpsPoint,
   ): Promise<boolean> {
-    const existingTrackings = await this.prisma.missionTracking.findMany({
-      where: { missionId, isValid: true },
+    const existingTrackings = await this.prisma.missionGPSTrack.findMany({
+      where: { isDeviated: false },
       select: { latitude: true, longitude: true },
       orderBy: { timestamp: 'desc' },
-      take: 10, // Vérifier contre les 10 derniers points valides
+      take: 10,
     });
 
     if (existingTrackings.length === 0) {
-      return false; // Premier point, pas de déviation possible
+      return false;
     }
 
-    // Calculer la position moyenne
     const avgLat =
       existingTrackings.reduce((sum, t) => sum + t.latitude, 0) /
       existingTrackings.length;

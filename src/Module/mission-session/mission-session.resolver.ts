@@ -4,9 +4,13 @@ import { Args, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { MissionSessionService } from './mission-session.service';
 import { MissionSessionEntity } from './entities/mission-session.entity';
+import { EtapeSession, MissionSessionMediaEntity } from './entities/mission-session-media.entity';
+import { PhotoValidationResult } from './dto/mission-session.outputs';
+
 import {
   EndMissionSessionInput,
   StartMissionSessionInput,
+  UploadMissionPhotosInput,
 } from './dto/mission-session.inputs';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -22,7 +26,7 @@ export class MissionSessionResolver {
   // ── Mutations ──────────────────────────────────────────────
 
   @Mutation(() => MissionSessionEntity, {
-    description: 'Démarre une mission : consent + GPS obligatoires',
+    description: 'Démarre une mission : consent + GPS + photos obligatoires',
   })
   @Roles(Role.ADHERENT)
   async startMissionSession(
@@ -33,7 +37,7 @@ export class MissionSessionResolver {
   }
 
   @Mutation(() => MissionSessionEntity, {
-    description: 'Termine une mission en cours',
+    description: 'Termine une mission en cours avec photos finales',
   })
   @Roles(Role.ADHERENT)
   async endMissionSession(
@@ -43,7 +47,23 @@ export class MissionSessionResolver {
     return this.service.endSession(input, user.id);
   }
 
-  // ── Query ──────────────────────────────────────────────────
+  @Mutation(() => [MissionSessionMediaEntity], {
+    description: 'Upload les photos pour une session (avant ou après mission)',
+  })
+  @Roles(Role.ADHERENT)
+  async uploadMissionPhotos(
+    @Args('input') input: UploadMissionPhotosInput,
+    @CurrentUser() user: { id: number; role: Role },
+  ): Promise<MissionSessionMediaEntity[]> {
+    return this.service.uploadPhotos(
+      input.sessionId,
+      input.medias,
+      input.etape,
+      user.id,
+    );
+  }
+
+  // ── Queries ────────────────────────────────────────────────
 
   @Query(() => MissionSessionEntity, {
     nullable: true,
@@ -56,4 +76,38 @@ export class MissionSessionResolver {
   ): Promise<MissionSessionEntity | null> {
     return this.service.getSessionByReservation(reservationId, user.id);
   }
+
+  @Query(() => [MissionSessionMediaEntity], {
+    description: 'Récupère les photos d\'une session (pré ou post mission)',
+  })
+  @Roles(Role.ADHERENT)
+  async getMissionSessionPhotos(
+    @Args('sessionId') sessionId: string,
+    @Args('etape', { nullable: true, type: () => EtapeSession }) etape: EtapeSession | undefined,
+    @CurrentUser() user: { id: number; role: Role },
+  ): Promise<MissionSessionMediaEntity[]> {
+    return this.service.getSessionPhotos(sessionId, user.id, etape);
+  }
+
+ @Query(() => PhotoValidationResult, {
+  description: 'Valide les photos obligatoires pré-départ',
+})
+@Roles(Role.ADHERENT)
+async validatePreMissionPhotos(
+  @Args('sessionId') sessionId: string,
+  @CurrentUser() user: { id: number; role: Role },
+): Promise<PhotoValidationResult> {
+  return this.service.validatePrePhotos(sessionId, user.id);
+}
+
+@Query(() => PhotoValidationResult, {
+  description: 'Valide les photos obligatoires post-livraison',
+})
+@Roles(Role.ADHERENT)
+async validatePostMissionPhotos(
+  @Args('sessionId') sessionId: string,
+  @CurrentUser() user: { id: number; role: Role },
+): Promise<PhotoValidationResult> {
+  return this.service.validatePostPhotos(sessionId, user.id);
+}
 }

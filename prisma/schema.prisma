@@ -104,6 +104,51 @@ enum TypeAlerte {
   TRAJET // Type 2 : 2 Villes + Rayon commun
 }
 
+// ==================== GESTION DES PHOTOS DE SESSION ====================
+
+enum EtapeSession {
+  PRE_DEPART       // Photos avant la mission
+  POST_LIVRAISON   // Photos après la livraison
+
+  @@map("etape_session")
+}
+enum IncidentType {
+  DÉVIATION_GPS           // Sortie de zone autorisée
+  VITESSE_EXCESSIVE       // Vitesse > limite
+  ARRÊT_PROLONGÉ          // Arrêt > X minutes
+  DÉTOUR_INJUSTIFIÉ       // Détour détecté
+  ANOMALIE_CARBURANT      // Consommation anormale
+}
+enum TypeMediaSession {
+  // ──── PRÉ-DÉPART (véhicule avant mission) ────
+  PHOTO_AVANT
+  PHOTO_ARRIERE
+  PHOTO_GAUCHE
+  PHOTO_DROIT
+  PHOTO_INTERIEUR
+  PHOTO_TABLEAU_BORD
+  PHOTO_CARBURANT
+  DEGATS_PRE_MISSION
+
+  // ──── DOCUMENTS ────
+  PERMIS_RECTO_CONDUCTEUR
+  PERMIS_VERSO_CONDUCTEUR
+
+  // ──── POST-LIVRAISON (véhicule après mission) ────
+  PHOTO_AVANT_FINAL
+  PHOTO_ARRIERE_FINAL
+  PHOTO_GAUCHE_FINAL
+  PHOTO_DROIT_FINAL
+  PHOTO_INTERIEUR_FINAL
+  PHOTO_TABLEAU_BORD_FINAL
+  CARBURANT_FINAL
+  DEGATS_POST_MISSION
+  PREUVE_LIVRAISON
+  SIGNATURE_CLIENT
+
+  @@map("type_media_session")
+}
+
 // ==================== FICHE TECHNIQUE PRÉ-MISSION ====================
 
 enum StatutPreTripInspection {
@@ -721,9 +766,8 @@ model Mission {
   calculs       CalculMission?
   documents     Document[]
   reservations  ReservationMission[]
-  trackings     MissionTracking[]      // ✅ Positions GPS en temps réel
   completion    MissionCompletion?     // ✅ Résumé final
-sessions MissionSession[]
+  sessions      MissionSession[]
 
   @@index([agentId])
   @@index([partenaireId])
@@ -1088,29 +1132,32 @@ model HistoriqueAnnulation {
 // 📍 SUIVI GPS EN TEMPS RÉEL DURANT LA MISSION
 // ============================================
 
-model MissionTracking {
+model MissionGPSTrack {
   id String @id @default(cuid())
 
-  // Lien vers la mission en cours
-  missionId String
-  mission   Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  // ── Relations ────────────────────────────
+  sessionId String
+  session   MissionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  // Position GPS
-  latitude  Float
-  longitude Float
+  // ── Position GPS ─────────────────────────
+  latitude  Float              // Latitude actuelle
+  longitude Float              // Longitude actuelle
+  accuracy  Float?             // Précision GPS en mètres
+  altitude  Float?             // Altitude en mètres
+  bearing   Float?             // Direction 0-360°
+  speed     Float?             // Vitesse en km/h
 
-  // Précision et timestamp
-  accuracy     Float?   // en mètres
-  timestamp    DateTime // timestamp EXACT de la position (client)
-  timestampServer DateTime @default(now()) // quand reçu par serveur
+  // ── Analyse déviation ────────────────────
+  distanceFromRoute Float?     // Distance destination (m)
+  isDeviated        Boolean @default(false)  // Sort de la zone ?
 
-  // Statut de validation
-  isValid      Boolean @default(true) // true si pas de déviation détectée
-  deviationReason String? // raison si rejeté anti-fraude
+  // ── Traçabilité ──────────────────────────
+  timestamp DateTime @default(now())
 
-  @@index([missionId, timestamp])
-  @@index([missionId, isValid])
-  @@map("mission_trackings")
+  @@index([sessionId])
+  @@index([timestamp])
+  @@index([isDeviated])
+  @@map("mission_gps_tracks")
 }
 
 // ============================================
@@ -1143,22 +1190,62 @@ model MissionCompletion {
 
   dateCreation DateTime @default(now())
 
+  // Relations
+  medias MissionCompletionMedia[] // ✅ Photos finales post-mission
+
   @@index([missionId])
   @@map("mission_completions")
 }
+
+// ============================================
+// 📸 MÉDIAS DE SESSION
+// ============================================
+
+model MissionSessionMedia {
+  id String @id @default(cuid())
+
+  // Relations
+  sessionId String
+  session   MissionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // Type et catégorie
+  etape        EtapeSession    // PRE_DEPART ou POST_LIVRAISON
+  typeMedia    TypeMediaSession
+  description  String?         @db.Text
+
+  // Fichier
+  cheminFichier String @db.VarChar(500)
+  urlPublic     String? @db.VarChar(500)
+
+  // Metadata
+  tailleOctets  Int?
+  typeContenu   String? @db.VarChar(50)
+
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([sessionId])
+  @@index([etape])
+  @@index([typeMedia])
+  @@unique([sessionId, etape, typeMedia])
+  @@map("mission_session_medias")
+}
+
+// ============================================
+// 📋 MISSION SESSION (Gestion complète)
+// ============================================
+
 model MissionSession {
   id String @id @default(cuid())
 
-  // ── Relations ────────────────────────────
-  // Lien vers la réservation (1-1)
+  // ── Relations existantes ─────────────────
   reservationId String             @unique
   reservation   ReservationMission @relation(fields: [reservationId], references: [id], onDelete: Cascade)
 
-  // Lien direct vers la mission (facilite les requêtes)
   missionId String
   mission   Mission @relation(fields: [missionId], references: [id], onDelete: Cascade)
 
-  // ── Consentement (une seule clause) ──────
+  // ── Consentement ─────────────────────────
   consentAccepted   Boolean  @default(false)
   dateConsentement  DateTime @default(now())
 
@@ -1175,8 +1262,18 @@ model MissionSession {
   kilometrageFin    Int?
   commentaireFin    String?  @db.Text
 
+  // ✨ NOUVEAU : Signature du client
+  signatureClient     String?         @db.Text    // SVG ou base64
+  nomClientSignature  String?         @db.VarChar(100)
+  dateSignatureClient DateTime?
+
   // ── Statut ────────────────────────────────
   statut StatutSession @default(EN_COURS)
+
+  // ── Relations enfants ──────────────────────
+  medias      MissionSessionMedia[]
+  gpsHistory  MissionGPSTrack[]      // ✨ NOUVEAU
+  incidents   MissionIncident[]       // ✨ NOUVEAU
 
   // ── Traçabilité ───────────────────────────
   dateCreation     DateTime @default(now())
@@ -1186,4 +1283,68 @@ model MissionSession {
   @@index([missionId])
   @@index([statut])
   @@map("mission_sessions")
+}
+
+// ============================================
+// 🏁 MÉDIAS DE COMPLÉTION POST-MISSION
+// ============================================
+
+model MissionCompletionMedia {
+  id String @id @default(cuid())
+
+  // Relations
+  completionId String
+  completion   MissionCompletion @relation(fields: [completionId], references: [id], onDelete: Cascade)
+
+  // Type de photo
+  typeMedia    TypeMediaSession // Réutilise l'enum (PHOTO_*_FINAL, PREUVE_LIVRAISON, etc.)
+  description  String?          @db.Text
+
+  // Fichier
+  cheminFichier String @db.VarChar(500)
+  urlPublic     String? @db.VarChar(500)
+
+  // Metadata
+  tailleOctets  Int?
+  typeContenu   String? @db.VarChar(50)
+
+  // Traçabilité
+  dateCreation     DateTime @default(now())
+  dateModification DateTime @updatedAt
+
+  @@index([completionId])
+  @@index([typeMedia])
+  @@map("mission_completion_medias")
+}
+
+model MissionIncident {
+  id String @id @default(cuid())
+
+  // ── Relations ────────────────────────────
+  sessionId String
+  session   MissionSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // ── Type incident ────────────────────────
+  typeIncident IncidentType
+  description  String @db.Text
+
+  // ── Localisation ─────────────────────────
+  latitude  Float
+  longitude Float
+
+  // ── Preuve ───────────────────────────────
+  photoIncident String? @db.VarChar(500)  // Photo incident si prise
+
+  // ── Résolution ───────────────────────────
+  resolvedBy        String?
+  resolutionNotes   String? @db.Text
+  dateResolution    DateTime?
+
+  // ── Traçabilité ──────────────────────────
+  dateCreation DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([typeIncident])
+  @@index([dateCreation])
+  @@map("mission_incidents")
 }

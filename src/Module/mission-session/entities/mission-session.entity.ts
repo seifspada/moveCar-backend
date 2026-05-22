@@ -2,6 +2,7 @@
 
 import { Field, Float, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
 import { StatutSession as PrismaStatutSession } from '@prisma/client'; // ✅ IMPORT
+import { MissionSessionMediaEntity } from './mission-session-media.entity'; // ✅ IMPORT
 
 // ✅ Utiliser directement l'enum Prisma
 export enum StatutSession {
@@ -59,9 +60,22 @@ export class MissionSessionEntity {
   @Field({ nullable: true })
   commentaireFin?: string | null;
 
+  @Field({ nullable: true })
+  signatureClient?: string | null;
+
+  @Field({ nullable: true })
+  nomClientSignature?: string | null;
+
+  @Field({ nullable: true })
+  dateSignatureClient?: Date | null;
+
   // ── Statut ─────────────────────────────
   @Field(() => StatutSession)
   statut: StatutSession; // ✅ Type cohérent
+
+  // ── Médias ─────────────────────────────
+  @Field(() => [MissionSessionMediaEntity], { nullable: true })
+  medias?: MissionSessionMediaEntity[] | null; // ✅ Photos avant/après
 
   // ── Traçabilité ────────────────────────
   @Field()

@@ -176,6 +176,15 @@ type DocumentEntity {
   typeDocument: String!
 }
 
+input EndMissionSessionInput {
+  commentaireFin: String
+  kilometrageFin: Int
+  latitudeFin: Float!
+  longitudeFin: Float!
+  photosPost: [MediaUploadInput!]
+  sessionId: String!
+}
+
 """Étape courante du stepper d'inspection (pour reprise après crash)"""
 enum EtapeInspection {
   CONDITIONS
@@ -185,6 +194,11 @@ enum EtapeInspection {
   INTERIEUR
   TABLEAU_BORD
   TERMINEE
+}
+
+enum EtapeSession {
+  POST_LIVRAISON
+  PRE_DEPART
 }
 
 type FichierDocumentEntity {
@@ -203,6 +217,13 @@ input InspectionFilterInput {
   """Filtrer par statut (DRAFT, IN_PROGRESS, VALIDATED, REJECTED)"""
   statut: StatutPreTripInspection
   take: Int = 20
+}
+
+input MediaUploadInput {
+  base64Data: String!
+  description: String
+  typeContenu: String
+  typeMedia: TypeMediaSession!
 }
 
 type MissionCardType {
@@ -235,6 +256,44 @@ type MissionEntity {
   vehicule: VehiculeMissionEntity!
 }
 
+type MissionSession {
+  commentaireFin: String
+  consentAccepted: Boolean!
+  dateConsentement: DateTime!
+  dateCreation: DateTime!
+  dateDebut: DateTime!
+  dateFin: DateTime
+  dateModification: DateTime!
+  dateSignatureClient: DateTime
+  id: ID!
+  kilometrageDebut: Int
+  kilometrageFin: Int
+  latitudeDebut: Float!
+  latitudeFin: Float
+  longitudeDebut: Float!
+  longitudeFin: Float
+  medias: [MissionSessionMedia!]
+  missionId: String!
+  nomClientSignature: String
+  reservationId: String!
+  signatureClient: String
+  statut: StatutSession!
+}
+
+type MissionSessionMedia {
+  cheminFichier: String!
+  dateCreation: DateTime!
+  dateModification: DateTime!
+  description: String
+  etape: EtapeSession!
+  id: ID!
+  sessionId: String!
+  tailleOctets: Int
+  typeContenu: String
+  typeMedia: TypeMediaSession!
+  urlPublic: String
+}
+
 type MissionsPaginatedResponse {
   missions: [MissionCardType!]!
   page: Int!
@@ -249,6 +308,8 @@ type Mutation {
 
   """Accepter une réservation EN_ATTENTE (agent — étape 1)"""
   acceptReservation(id: String!): ReservationMissionEntity!
+
+  """Activer une alerte par son ID"""
   activerAlerte(id: String!): AlerteGeographique!
 
   """
@@ -261,13 +322,27 @@ type Mutation {
 
   """Confirmer une réservation acceptée par l'agent (adhérent — étape 2)"""
   confirmReservationByAdherent(id: String!): ReservationMissionEntity!
+
+  """Créer une alerte géographique"""
   createAlerteGeographique(input: CreateAlerteGeographiqueInput!): AlerteGeographique!
+
+  """Créer une alerte trajet"""
   createAlerteTrajet(input: CreateAlerteTrajetInput!): AlerteGeographique!
   createMission(input: CreateMissionInput!): MissionEntity!
 
   """Créer une nouvelle réservation de mission (adhérent)"""
   createReservation(input: CreateReservationInput!): ReservationResponse!
+
+  """Désactiver une alerte par son ID"""
+  desactiverAlerte(id: String!): Boolean!
+
+  """Désactiver toutes mes alertes"""
   desactiverMesAlertes: Boolean!
+
+  """Termine une mission en cours avec photos finales"""
+  endMissionSession(input: EndMissionSessionInput!): MissionSession!
+
+  """Modifier le rayon d'une alerte"""
   modifierRayonAlerte(id: String!, rayon: Int!): AlerteGeographique!
 
   """Refuser une demande d'annulation (agent)"""
@@ -282,9 +357,22 @@ type Mutation {
   """Démarre une inspection pré-mission (Adhérent uniquement)"""
   startInspection(input: StartInspectionInput!): PreTripInspection!
 
+  """Démarre une mission : consent + GPS + photos obligatoires"""
+  startMissionSession(input: StartMissionSessionInput!): MissionSession!
+
   """Soumet le consentement de l'adhérent (étape 6)"""
   submitConsent(input: SubmitConsentInput!): PreTripInspection!
+
+  """Supprimer une alerte par son ID"""
   supprimerAlerte(id: String!): Boolean!
+
+  """
+  Mettre à jour le token Firebase Cloud Messaging pour les notifications push
+  """
+  updateFcmToken(fcmToken: String!): Boolean!
+
+  """Upload les photos pour une session (avant ou après mission)"""
+  uploadMissionPhotos(input: UploadMissionPhotosInput!): [MissionSessionMedia!]!
 
   """Valide l'inspection finale et démarre la mission"""
   validateAndStartMission(input: ValidateInspectionInput!): PreTripInspection!
@@ -318,6 +406,11 @@ type PartenaireNavbar {
   email: String!
   entite: String!
   photo: String
+}
+
+type PhotoValidationResult {
+  manquantes: [String!]!
+  valide: Boolean!
 }
 
 """Acceptation horodatée des conditions de mission"""
@@ -425,8 +518,14 @@ type Query {
 
   """Récupérer toutes les réservations (admin/agent)"""
   allReservations: [ReservationMissionEntity!]!
+
+  """Vérifier les nouvelles missions correspondant à mes alertes"""
   checkNouvellesMissions: [AlerteGeographique!]!
+
+  """Récupérer une alerte par son ID"""
   getAlerteById(id: String!): AlerteGeographique
+
+  """Récupérer toutes les alertes de tous les utilisateurs"""
   getAllAlertes: [AlerteGeographique!]!
 
   """Récupère l'inspection d'une réservation"""
@@ -436,10 +535,25 @@ type Query {
   getInspectionDetails(inspectionId: ID!): PreTripInspection!
   getMissionById(id: String!): MissionEntity
 
+  """Récupère la session d'une réservation"""
+  getMissionSession(reservationId: String!): MissionSession
+
+  """Récupère les photos d'une session (pré ou post mission)"""
+  getMissionSessionPhotos(etape: EtapeSession, sessionId: String!): [MissionSessionMedia!]!
+
   """Toutes les missions sans filtre (admin/agent)"""
   getMissionsForCardsByAgence: [MissionCardType!]!
+
+  """Récupérer toutes mes alertes"""
   getMyAlertes: [AlerteGeographique!]!
+
+  """Récupérer toutes mes alertes avec les tokens FCM"""
+  getMyAlertesByUserWithTokens: [AlerteGeographique!]!
+
+  """Récupérer l'historique de mes notifications"""
   getMyNotificationsHistory(limit: Int = 50): [NotificationAlerte!]!
+
+  """Récupérer les statistiques des alertes"""
   getStatsAlertes: StatsAlertes!
 
   """Liste les inspections (filtrage par rôle automatique)"""
@@ -464,6 +578,15 @@ type Query {
   searchMissions(page: Int = 1, pageSize: Int = 20, search: String): MissionsPaginatedResponse!
   searchMissionsByPosition(filters: SearchByPositionInput!, page: Int, pageSize: Int): MissionsPaginatedResponse!
   searchMissionsByTrajet(filters: SearchByTrajetInput!, page: Int, pageSize: Int): MissionsPaginatedResponse!
+
+  """[ADMIN] Valider tous les tokens Firebase Cloud Messaging"""
+  validateAllFcmTokens: ValidateTokensResult!
+
+  """Valide les photos obligatoires post-livraison"""
+  validatePostMissionPhotos(sessionId: String!): PhotoValidationResult!
+
+  """Valide les photos obligatoires pré-départ"""
+  validatePreMissionPhotos(sessionId: String!): PhotoValidationResult!
 }
 
 type ReservationMissionEntity {
@@ -540,6 +663,15 @@ input StartInspectionInput {
   reservationId: String!
 }
 
+input StartMissionSessionInput {
+  consentAccepted: Boolean!
+  kilometrageDebut: Int
+  latitudeDebut: Float!
+  longitudeDebut: Float!
+  photosPre: [MediaUploadInput!]
+  reservationId: String!
+}
+
 type StatsAlertes {
   actives: Int!
   inactives: Int!
@@ -575,6 +707,11 @@ enum StatutReservation {
   CONFIRMED_BY_ADHERENT
   EN_ATTENTE
   REFUSEE
+}
+
+enum StatutSession {
+  EN_COURS
+  TERMINEE
 }
 
 """Acceptation des conditions de mission par le convoyeur"""
@@ -649,6 +786,29 @@ enum TypeMediaInspection {
   TABLEAU_BORD
 }
 
+enum TypeMediaSession {
+  CARBURANT_FINAL
+  DEGATS_POST_MISSION
+  DEGATS_PRE_MISSION
+  PERMIS_RECTO_CONDUCTEUR
+  PERMIS_VERSO_CONDUCTEUR
+  PHOTO_ARRIERE
+  PHOTO_ARRIERE_FINAL
+  PHOTO_AVANT
+  PHOTO_AVANT_FINAL
+  PHOTO_CARBURANT
+  PHOTO_DROIT
+  PHOTO_DROIT_FINAL
+  PHOTO_GAUCHE
+  PHOTO_GAUCHE_FINAL
+  PHOTO_INTERIEUR
+  PHOTO_INTERIEUR_FINAL
+  PHOTO_TABLEAU_BORD
+  PHOTO_TABLEAU_BORD_FINAL
+  PREUVE_LIVRAISON
+  SIGNATURE_CLIENT
+}
+
 enum TypeVehicule {
   BERLINE
   CABRIOLET
@@ -666,6 +826,12 @@ enum TypeVehicule {
   VU_30M3
 }
 
+input UploadMissionPhotosInput {
+  etape: EtapeSession!
+  medias: [MediaUploadInput!]!
+  sessionId: String!
+}
+
 type UserSimpleEntity {
   email: String!
   name: String!
@@ -679,6 +845,12 @@ input ValidateInspectionInput {
   """GPS du convoyeur au moment du clic final"""
   latitudeFin: Float
   longitudeFin: Float
+}
+
+type ValidateTokensResult {
+  invalides: Int!
+  total: Int!
+  valides: Int!
 }
 
 type VehiculeMissionEntity {
