@@ -30,6 +30,7 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { PreTripInspectionModule } from './Module/pretrip-inspection/pretrip-inspection.module';
 import { NotificationModule } from './Module/notification/notification.module';
 import { MissionSessionModule } from './Module/mission-session/mission-session.module';
+import { MissionTrackingModule } from './Module/mission-tracking/mission-tracking.module';
 
 // ✅ Initialisation Firebase Admin (une seule fois au démarrage)
 if (!admin.apps.length) {
@@ -85,6 +86,7 @@ if (!admin.apps.length) {
     PreTripInspectionModule,
     NotificationModule,
     MissionSessionModule,
+    MissionTrackingModule,
   ],
   controllers: [AppController],
   providers: [AppService],
