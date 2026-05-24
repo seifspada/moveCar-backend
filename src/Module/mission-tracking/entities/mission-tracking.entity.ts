@@ -62,6 +62,12 @@ export class ActiveMissionMap {
   @Field(() => Float)
   longitude: number;
 
+  @Field(() => Float)
+  latitudeArrivee: number;
+
+  @Field(() => Float)
+  longitudeArrivee: number;
+
   @Field(() => Float, { nullable: true })
   accuracy?: number;
 

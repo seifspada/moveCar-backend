@@ -172,6 +172,7 @@ export class MissionTrackingService {
         mission: {
           include: {
             vehicule: true,
+            adresseArrivee: true,
           },
         },
         reservation: {
@@ -194,6 +195,8 @@ export class MissionTrackingService {
         status: session.mission.statut,
         latitude: lastGps?.latitude ?? session.latitudeDebut,
         longitude: lastGps?.longitude ?? session.longitudeDebut,
+        latitudeArrivee: session.mission.adresseArrivee.latitude,
+        longitudeArrivee: session.mission.adresseArrivee.longitude,
         accuracy: lastGps?.accuracy ?? null,
         lastGpsAt: lastGps?.timestamp ?? session.dateDebut,
         isDeviated: lastGps?.isDeviated ?? false,
