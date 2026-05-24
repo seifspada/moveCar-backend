@@ -7,7 +7,11 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { UpdateLocationInput, CompleteMissionInput } from './dto';
-import { MissionTracking, MissionCompletion } from './entities/mission-tracking.entity';
+import {
+  ActiveMissionMap,
+  MissionTracking,
+  MissionCompletion,
+} from './entities/mission-tracking.entity';
 
 // ============================================
 // CONSTANTES & CONFIGURATION
@@ -46,6 +50,11 @@ export class MissionTrackingService {
           where: { statut: 'CONFIRMED_BY_ADHERENT' },
           include: { adherent: true },
         },
+        sessions: {
+          where: { statut: 'EN_COURS' },
+          orderBy: { dateDebut: 'desc' },
+          take: 1,
+        },
       },
     });
 
@@ -67,6 +76,13 @@ export class MissionTrackingService {
       );
     }
 
+    const session = mission.sessions[0];
+    if (!session) {
+      throw new BadRequestException(
+        'Aucune session en cours trouvee pour cette mission.',
+      );
+    }
+
     // Validation basique du timestamp
     const ageSeconds = (Date.now() - input.timestamp.getTime()) / 1000;
     if (ageSeconds > MAX_LOCATION_AGE_SECONDS) {
@@ -76,7 +92,7 @@ export class MissionTrackingService {
     }
 
     // Vérifier la cohérence GPS avec les positions précédentes
-    const isDeviated = await this.checkGpsDeviation(input.missionId, {
+    const isDeviated = await this.checkGpsDeviation(session.id, {
       latitude: input.latitude,
       longitude: input.longitude,
     });
@@ -84,7 +100,7 @@ export class MissionTrackingService {
     // Enregistrer le point GPS
     const tracking = await this.prisma.missionGPSTrack.create({
       data: {
-        sessionId: '', // Note: MissionGPSTrack requires sessionId, needs update
+        sessionId: session.id,
         latitude: input.latitude,
         longitude: input.longitude,
         accuracy: input.accuracy,
@@ -120,11 +136,69 @@ export class MissionTrackingService {
     await this.assertMissionAccess(missionId, userId);
 
     const trackings = await this.prisma.missionGPSTrack.findMany({
-      where: { sessionId: '' },
+      where: { session: { missionId } },
       orderBy: { timestamp: 'asc' },
     });
 
     return trackings as any;
+  }
+
+  /**
+   * Recupere la derniere position de chaque mission en cours pour la carte agent.
+   */
+  async getActiveMissionsMap(userId: number): Promise<ActiveMissionMap[]> {
+    const agent = await this.prisma.agent.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!agent) {
+      throw new ForbiddenException('Agent introuvable.');
+    }
+
+    const sessions = await this.prisma.missionSession.findMany({
+      where: {
+        statut: 'EN_COURS',
+        mission: {
+          statut: 'EN_COURS',
+          agentId: agent.id,
+        },
+      },
+      include: {
+        gpsHistory: {
+          orderBy: { timestamp: 'desc' },
+          take: 1,
+        },
+        mission: {
+          include: {
+            vehicule: true,
+          },
+        },
+        reservation: {
+          include: {
+            adherent: true,
+          },
+        },
+      },
+      orderBy: { dateDebut: 'desc' },
+    });
+
+    return sessions.map((session) => {
+      const lastGps = session.gpsHistory[0];
+
+      return {
+        missionId: session.missionId,
+        sessionId: session.id,
+        vehicleName: `${session.mission.vehicule.marqueModele} - ${session.mission.vehicule.immatriculation}`,
+        convoyeurName: `${session.reservation.adherent.prenom} ${session.reservation.adherent.nom}`,
+        status: session.mission.statut,
+        latitude: lastGps?.latitude ?? session.latitudeDebut,
+        longitude: lastGps?.longitude ?? session.longitudeDebut,
+        accuracy: lastGps?.accuracy ?? null,
+        lastGpsAt: lastGps?.timestamp ?? session.dateDebut,
+        isDeviated: lastGps?.isDeviated ?? false,
+      };
+    });
   }
 
   /**
@@ -154,6 +228,7 @@ export class MissionTrackingService {
 
     // Récupérer tous les points de suivi
     const trackings = await this.prisma.missionGPSTrack.findMany({
+      where: { session: { missionId: input.missionId } },
       orderBy: { timestamp: 'asc' },
     });
 
@@ -257,11 +332,11 @@ export class MissionTrackingService {
    * Vérifie si une position s'écarte trop des positions précédentes
    */
   private async checkGpsDeviation(
-    missionId: string,
+    sessionId: string,
     newPosition: GpsPoint,
   ): Promise<boolean> {
     const existingTrackings = await this.prisma.missionGPSTrack.findMany({
-      where: { isDeviated: false },
+      where: { sessionId, isDeviated: false },
       select: { latitude: true, longitude: true },
       orderBy: { timestamp: 'desc' },
       take: 10,

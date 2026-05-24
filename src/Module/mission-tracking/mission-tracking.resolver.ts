@@ -1,7 +1,11 @@
 import { Resolver, Query, Mutation, Args, ID } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { MissionTrackingService } from './mission-tracking.service';
-import { MissionTracking, MissionCompletion } from './entities/mission-tracking.entity';
+import {
+  ActiveMissionMap,
+  MissionTracking,
+  MissionCompletion,
+} from './entities/mission-tracking.entity';
 import { UpdateLocationInput, CompleteMissionInput } from './dto';
 import { GqlAuthGuard } from '../../auth/guards/gql-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
@@ -53,6 +57,16 @@ export class MissionTrackingResolver {
     @CurrentUser() user: { id: number; role: Role },
   ): Promise<MissionTracking[]> {
     return this.missionTrackingService.getTrackingHistory(missionId, user.id);
+  }
+
+  @Query(() => [ActiveMissionMap], {
+    description: 'Recupere les missions en cours avec leur derniere position GPS',
+  })
+  @Roles(Role.AGENT, Role.ADMIN)
+  async getActiveMissionsMap(
+    @CurrentUser() user: { id: number; role: Role },
+  ): Promise<ActiveMissionMap[]> {
+    return this.missionTrackingService.getActiveMissionsMap(user.id);
   }
 
   @Query(() => MissionCompletion, {

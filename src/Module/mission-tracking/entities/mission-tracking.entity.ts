@@ -5,8 +5,11 @@ export class MissionTracking {
   @Field(() => ID)
   id: string;
 
-  @Field(() => ID)
-  missionId: string;
+  @Field(() => ID, { nullable: true })
+  missionId?: string;
+
+  @Field(() => ID, { nullable: true })
+  sessionId?: string;
 
   @Field(() => Float)
   latitude: number;
@@ -20,14 +23,53 @@ export class MissionTracking {
   @Field(() => Date)
   timestamp: Date;
 
-  @Field(() => Date)
-  timestampServer: Date;
+  @Field(() => Date, { nullable: true })
+  timestampServer?: Date;
+
+  @Field(() => Boolean, { nullable: true })
+  isValid?: boolean;
 
   @Field(() => Boolean)
-  isValid: boolean;
+  isDeviated: boolean;
+
+  @Field(() => Float, { nullable: true })
+  distanceFromRoute?: number;
 
   @Field(() => String, { nullable: true })
   deviationReason?: string;
+}
+
+@ObjectType()
+export class ActiveMissionMap {
+  @Field(() => ID)
+  missionId: string;
+
+  @Field(() => ID)
+  sessionId: string;
+
+  @Field(() => String)
+  vehicleName: string;
+
+  @Field(() => String)
+  convoyeurName: string;
+
+  @Field(() => String)
+  status: string;
+
+  @Field(() => Float)
+  latitude: number;
+
+  @Field(() => Float)
+  longitude: number;
+
+  @Field(() => Float, { nullable: true })
+  accuracy?: number;
+
+  @Field(() => Date)
+  lastGpsAt: Date;
+
+  @Field(() => Boolean)
+  isDeviated: boolean;
 }
 
 @ObjectType()
