@@ -838,4 +838,20 @@ async accepterDemande(id: number, dto: AccepterDemandeDto, contratFiles: Fastify
       })),
     };
   }
+
+async getContratTarification(demandeId: number) {
+  const contrat = await this.prisma.contratPartenaire.findUnique({
+    where: { demandePartenaireId: demandeId },
+    select: {
+      prixParKm:               true,
+      depassementKilometrage:  true,
+      retardSansAvertissement: true,
+      restitutionAutreEndroit: true,
+    },
+  });
+
+  if (!contrat) throw new NotFoundException(`Contrat introuvable pour la demande #${demandeId}`);
+  return contrat;
+}
+
 }
