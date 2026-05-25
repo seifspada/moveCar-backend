@@ -34,4 +34,7 @@ export class MissionCardType {
 
   @Field({ nullable: true })
   dateDepartMax: Date;
+
+    @Field(() => Boolean)
+  isFavori: boolean;  // ✅ ajouter cette ligne
 }

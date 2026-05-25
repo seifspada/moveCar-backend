@@ -22,6 +22,8 @@ export type MissionWithRelations = Mission & {
   adresseArrivee: Adresse;
   calculs?: CalculMission;
   disponibilite?: DisponibiliteMission;
+    isFavori: boolean; // ✅ ajouter cette ligne
+
 };
 
 export type MissionWithRelationsFlat = Omit<MissionWithRelations, 'calculs'> & {
@@ -97,7 +99,7 @@ async searchMissionsByPosition(
 
   const missionIdsBloquees = await this.getMissionIdsBloquees(adherentId);
 
-  const allMissions: MissionWithRelations[] = await this.prisma.mission.findMany({
+  const allMissions = await this.prisma.mission.findMany({
     where: {
       statut: StatutMission.EN_ATTENTE,
       ...(missionIdsBloquees.length > 0 && {
@@ -110,6 +112,10 @@ async searchMissionsByPosition(
       adresseArrivee: true,
       calculs: true,
       disponibilite: true,
+      // ✅ Même logique que getMissionsForCards
+      favoris: adherentId
+        ? { where: { adherentId } }
+        : false,
     },
   });
 
@@ -123,37 +129,38 @@ async searchMissionsByPosition(
     `🎯 Recherche autour de ${filters.villeNom}: (${filters.latitude}, ${filters.longitude}) rayon ${filters.rayon} km`,
   );
 
-  const missionsInRadius = allMissions.filter((mission) => {
-    try {
-      if (!mission.adresseDepart?.latitude || !mission.adresseDepart?.longitude) return false;
-      if (!mission.adresseArrivee?.latitude || !mission.adresseArrivee?.longitude) return false;
+  const missionsInRadius = allMissions
+    .filter((mission) => {
+      try {
+        if (!mission.adresseDepart?.latitude || !mission.adresseDepart?.longitude) return false;
+        if (!mission.adresseArrivee?.latitude || !mission.adresseArrivee?.longitude) return false;
 
-      const latDepart = Number(mission.adresseDepart.latitude);
-      const lonDepart = Number(mission.adresseDepart.longitude);
-      const latArrivee = Number(mission.adresseArrivee.latitude);
-      const lonArrivee = Number(mission.adresseArrivee.longitude);
+        const distanceDepart = this.geoService.calculateDistance(
+          filters.latitude,
+          filters.longitude,
+          Number(mission.adresseDepart.latitude),
+          Number(mission.adresseDepart.longitude),
+        );
 
-      const distanceDepart = this.geoService.calculateDistance(
-        filters.latitude,
-        filters.longitude,
-        latDepart,
-        lonDepart,
-      );
+        const distanceArrivee = this.geoService.calculateDistance(
+          filters.latitude,
+          filters.longitude,
+          Number(mission.adresseArrivee.latitude),
+          Number(mission.adresseArrivee.longitude),
+        );
 
-      const distanceArrivee = this.geoService.calculateDistance(
-        filters.latitude,
-        filters.longitude,
-        latArrivee,
-        lonArrivee,
-      );
-
-      return distanceDepart <= filters.rayon || distanceArrivee <= filters.rayon;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`❌ Erreur mission ${mission.id}:`, message);
-      return false;
-    }
-  });
+        return distanceDepart <= filters.rayon || distanceArrivee <= filters.rayon;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`❌ Erreur mission ${mission.id}:`, message);
+        return false;
+      }
+    })
+    // ✅ Aplatir isFavori après le filtre
+    .map((m) => ({
+      ...m,
+      isFavori: adherentId ? m.favoris.length > 0 : false,
+    }));
 
   console.log(`✅ ${missionsInRadius.length} mission(s) trouvée(s)`);
   console.log('🔍 ==========================================\n');
@@ -694,7 +701,7 @@ console.log('📍 adresseArrivee:', adresseArrivee.latitude, adresseArrivee.long
 async getMissionsForCards(adherentId?: number): Promise<MissionWithRelations[]> {
   const missionIdsBloquees = await this.getMissionIdsBloquees(adherentId);
 
-  return this.prisma.mission.findMany({
+  const missions = await this.prisma.mission.findMany({
     where: {
       ...(missionIdsBloquees.length > 0 && {
         id: { notIn: missionIdsBloquees },
@@ -706,9 +713,19 @@ async getMissionsForCards(adherentId?: number): Promise<MissionWithRelations[]> 
       adresseArrivee: true,
       calculs: true,
       disponibilite: true,
+      // Récupérer uniquement le favori de cet adhérent
+      favoris: adherentId
+        ? { where: { adherentId } }
+        : false,
     },
     orderBy: { dateCreation: 'desc' },
   });
+
+  // Aplatir isFavori directement sur chaque mission
+  return missions.map((m) => ({
+    ...m,
+    isFavori: adherentId ? m.favoris.length > 0 : false,
+  }));
 }
 
 async searchMissions(
@@ -732,7 +749,7 @@ async searchMissions(
     }),
   };
 
-  const [missions, total] = await Promise.all([
+  const [rawMissions, total] = await Promise.all([
     this.prisma.mission.findMany({
       where,
       include: {
@@ -741,6 +758,10 @@ async searchMissions(
         adresseArrivee: true,
         calculs: true,
         disponibilite: true,
+        // ✅ Ajout favoris
+        favoris: adherentId
+          ? { where: { adherentId } }
+          : false,
       },
       orderBy: { dateCreation: 'desc' },
       skip,
@@ -748,6 +769,12 @@ async searchMissions(
     }),
     this.prisma.mission.count({ where }),
   ]);
+
+  // ✅ Aplatir isFavori
+  const missions = rawMissions.map((m) => ({
+    ...m,
+    isFavori: adherentId ? m.favoris.length > 0 : false,
+  }));
 
   return { missions, total };
 }
@@ -764,7 +791,7 @@ async searchMissionsByTrajet(
 
   const missionIdsBloquees = await this.getMissionIdsBloquees(adherentId);
 
-  const allMissions: MissionWithRelations[] = await this.prisma.mission.findMany({
+  const allMissions = await this.prisma.mission.findMany({
     where: {
       statut: 'EN_ATTENTE',
       ...(missionIdsBloquees.length > 0 && {
@@ -777,13 +804,23 @@ async searchMissionsByTrajet(
       adresseArrivee: true,
       calculs: true,
       disponibilite: true,
+      // ✅ Ajout favoris
+      favoris: adherentId
+        ? { where: { adherentId } }
+        : false,
     },
   });
 
-  const missionsMatchingTrajet = allMissions.filter((mission) => {
-    // ta logique distance/date
-    return true;
-  });
+  const missionsMatchingTrajet = allMissions
+    .filter((mission) => {
+      // ta logique distance/date
+      return true;
+    })
+    // ✅ Aplatir isFavori après le filtre
+    .map((m) => ({
+      ...m,
+      isFavori: adherentId ? m.favoris.length > 0 : false,
+    }));
 
   const total = missionsMatchingTrajet.length;
   const skip = (page - 1) * pageSize;
@@ -882,7 +919,7 @@ catch (error) {
 
   // ✅ Retourne toutes les missions (toutes agences confondues)
 async getMissionsForCardsByAgence(): Promise<MissionWithRelations[]> {
-  return this.prisma.mission.findMany({
+  const missions = await this.prisma.mission.findMany({
     include: {
       vehicule: true,
       adresseDepart: true,
@@ -892,5 +929,29 @@ async getMissionsForCardsByAgence(): Promise<MissionWithRelations[]> {
     },
     orderBy: { dateCreation: 'desc' },
   });
+
+  // ✅ Pas d'adherentId ici, isFavori toujours false
+  return missions.map((m) => ({
+    ...m,
+    isFavori: false,
+  }));
+}
+
+async toggleFavori(adherentId: number, missionId: string): Promise<{ isFavori: boolean }> {
+  const existing = await this.prisma.missionFavori.findUnique({
+    where: { adherentId_missionId: { adherentId, missionId } },
+  });
+
+  if (existing) {
+    await this.prisma.missionFavori.delete({
+      where: { adherentId_missionId: { adherentId, missionId } },
+    });
+    return { isFavori: false };
+  }
+
+  await this.prisma.missionFavori.create({
+    data: { adherentId, missionId },
+  });
+  return { isFavori: true };
 }
 }

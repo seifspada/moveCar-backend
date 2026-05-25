@@ -1,4 +1,4 @@
-// src/Module/missions/missions.resolver.ts - COMPLET avec createMission mutation
+// src/Module/missions/missions.resolver.ts
 import {
   Resolver,
   Query,
@@ -130,7 +130,8 @@ export class MissionsResolver {
     description: 'Toutes les missions sans filtre (admin/agent)',
   })
   async getMissionsForCardsByAgence(): Promise<MissionWithRelations[]> {
-    return this.missionsService.getMissionsForCards();
+    // ✅ CORRECTION : appeler getMissionsForCardsByAgence() et non getMissionsForCards()
+    return this.missionsService.getMissionsForCardsByAgence();
   }
 
   /**
@@ -239,25 +240,46 @@ export class MissionsResolver {
   /**
    * ✅ Créer une mission (PRINCIPALE)
    */
-@Mutation(() => MissionEntity)
-async createMission(
-  @Args('input', { type: () => CreateMissionInput })  // ← CreateMissionInput
-  input: CreateMissionInput,
-): Promise<MissionEntity> {
-  console.log('🚀 Mutation: createMission');
-  if (!input) throw new BadRequestException('Input requis');
-  const result = await this.missionsService.creerMission(input as any);
-  return {
-    ...result,
-    agent: result.agent?.user ? {
-      id: result.agent.user.id,
-      email: result.agent.user.email,
-      nom: result.agent.user.adherent?.nom,
-      prenom: result.agent.user.adherent?.prenom,
-      telephone: result.agent.user.adherent?.telephone,
-    } : null,
-  } as any;
-}
+  @Mutation(() => MissionEntity)
+  async createMission(
+    @Args('input', { type: () => CreateMissionInput })
+    input: CreateMissionInput,
+  ): Promise<MissionEntity> {
+    console.log('🚀 Mutation: createMission');
+    if (!input) throw new BadRequestException('Input requis');
+    const result = await this.missionsService.creerMission(input as any);
+    return {
+      ...result,
+      agent: result.agent?.user ? {
+        id: result.agent.user.id,
+        email: result.agent.user.email,
+        nom: result.agent.user.adherent?.nom,
+        prenom: result.agent.user.adherent?.prenom,
+        telephone: result.agent.user.adherent?.telephone,
+      } : null,
+    } as any;
+  }
+
+  /**
+   * ✅ NOUVEAU — Toggle favori mission
+   */
+  @Mutation(() => Boolean)
+  @UseGuards(GqlAuthGuard)
+  async toggleFavori(
+    @CurrentUser() user: any,
+    @Args('missionId', { type: () => String }) missionId: string,
+  ): Promise<boolean> {
+    const userId = user?.id || user?.sub;
+    const adherent = await this.prisma.adherent.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!adherent) throw new BadRequestException('Adhérent non trouvé');
+
+    const { isFavori } = await this.missionsService.toggleFavori(adherent.id, missionId);
+    return isFavori;
+  }
+
   // ─────────────────────────────────────────────────────────────
   //  RESOLVE FIELDS
   // ─────────────────────────────────────────────────────────────
@@ -321,6 +343,12 @@ async createMission(
   @ResolveField(() => Date, { nullable: true })
   dateDepartMax(@Parent() mission: MissionWithRelations): Date | null {
     return mission.disponibilite?.dateDepartMax ?? null;
+  }
+
+  // ✅ NOUVEAU — Expose isFavori comme champ GraphQL
+  @ResolveField(() => Boolean)
+  isFavori(@Parent() mission: MissionWithRelations): boolean {
+    return mission.isFavori ?? false;
   }
 
   // ─────────────────────────────────────────────────────────────

@@ -341,6 +341,7 @@ model Adherent {
   // Traçabilité
   dateCreation     DateTime @default(now())
   dateModification DateTime @updatedAt
+  missionsFavoris MissionFavori[]
 
   @@index([userId])
   @@index([statut])
@@ -768,6 +769,7 @@ model Mission {
   reservations  ReservationMission[]
   completion    MissionCompletion?     // ✅ Résumé final
   sessions      MissionSession[]
+  favoris MissionFavori[]   // ✅ ajouter uniquement cette ligne
 
   @@index([agentId])
   @@index([partenaireId])
@@ -775,6 +777,18 @@ model Mission {
   @@index([vehiculeId])
   @@index([statut])
   @@map("missions")
+}
+
+model MissionFavori {
+  adherentId Int
+  missionId  String   // ✅ String car Mission.id est uuid()
+  createdAt  DateTime @default(now())
+
+  adherent Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
+  mission  Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@id([adherentId, missionId])  // ✅ clé composite, pas d'id séparé
+  @@map("mission_favoris")
 }
 
 // ============================================

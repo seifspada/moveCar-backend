@@ -2,6 +2,21 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+type ActiveMissionMap {
+  accuracy: Float
+  convoyeurName: String!
+  isDeviated: Boolean!
+  lastGpsAt: DateTime!
+  latitude: Float!
+  latitudeArrivee: Float!
+  longitude: Float!
+  longitudeArrivee: Float!
+  missionId: ID!
+  sessionId: ID!
+  status: String!
+  vehicleName: String!
+}
+
 type AdherentPublic {
   email: String!
   nom: String!
@@ -85,6 +100,12 @@ type CalculEntity {
   fraisPeage: Float!
   id: String!
   montantTotal: Float!
+}
+
+input CompleteMissionInput {
+  latitudeFin: Float!
+  longitudeFin: Float!
+  missionId: ID!
 }
 
 input CreateAlerteGeographiqueInput {
@@ -232,12 +253,29 @@ type MissionCardType {
   distanceKm: Float!
   fraisPeage: Float!
   id: String!
+  isFavori: Boolean!
   montantTotal: Float!
   statut: String
   typeCarburant: String!
   typeVehicule: String!
   villeArrivee: String!
   villeDepart: String!
+}
+
+type MissionCompletion {
+  completed: Boolean!
+  dateCompletion: DateTime
+  dateCreation: DateTime!
+  dureeTrajet: Int
+  id: ID!
+  invalidLocations: Int!
+  invalidationReason: String
+  latitudeFin: Float!
+  longitudeFin: Float!
+  maxDeviation: Float
+  missionId: ID!
+  totalLocations: Int!
+  validLocations: Int!
 }
 
 type MissionEntity {
@@ -294,6 +332,21 @@ type MissionSessionMedia {
   urlPublic: String
 }
 
+type MissionTracking {
+  accuracy: Float
+  deviationReason: String
+  distanceFromRoute: Float
+  id: ID!
+  isDeviated: Boolean!
+  isValid: Boolean
+  latitude: Float!
+  longitude: Float!
+  missionId: ID
+  sessionId: ID
+  timestamp: DateTime!
+  timestampServer: DateTime
+}
+
 type MissionsPaginatedResponse {
   missions: [MissionCardType!]!
   page: Int!
@@ -319,6 +372,9 @@ type Mutation {
 
   """Annuler une réservation dans les 24h (adhérent)"""
   cancelReservation(id: String!, motifAnnulation: String): ReservationMissionEntity!
+
+  """Termine la mission et valide le trajet parcouru"""
+  completeMission(input: CompleteMissionInput!): MissionCompletion!
 
   """Confirmer une réservation acceptée par l'agent (adhérent — étape 2)"""
   confirmReservationByAdherent(id: String!): ReservationMissionEntity!
@@ -365,11 +421,15 @@ type Mutation {
 
   """Supprimer une alerte par son ID"""
   supprimerAlerte(id: String!): Boolean!
+  toggleFavori(missionId: String!): Boolean!
 
   """
   Mettre à jour le token Firebase Cloud Messaging pour les notifications push
   """
   updateFcmToken(fcmToken: String!): Boolean!
+
+  """Enregistre une position GPS pendant la mission"""
+  updateMissionLocation(input: UpdateLocationInput!): MissionTracking!
 
   """Upload les photos pour une session (avant ou après mission)"""
   uploadMissionPhotos(input: UploadMissionPhotosInput!): [MissionSessionMedia!]!
@@ -522,6 +582,9 @@ type Query {
   """Vérifier les nouvelles missions correspondant à mes alertes"""
   checkNouvellesMissions: [AlerteGeographique!]!
 
+  """Recupere les missions en cours avec leur derniere position GPS"""
+  getActiveMissionsMap: [ActiveMissionMap!]!
+
   """Récupérer une alerte par son ID"""
   getAlerteById(id: String!): AlerteGeographique
 
@@ -535,11 +598,17 @@ type Query {
   getInspectionDetails(inspectionId: ID!): PreTripInspection!
   getMissionById(id: String!): MissionEntity
 
+  """Récupère le résumé final d'une mission complétée"""
+  getMissionCompletion(missionId: ID!): MissionCompletion
+
   """Récupère la session d'une réservation"""
   getMissionSession(reservationId: String!): MissionSession
 
   """Récupère les photos d'une session (pré ou post mission)"""
   getMissionSessionPhotos(etape: EtapeSession, sessionId: String!): [MissionSessionMedia!]!
+
+  """Récupère l'historique GPS d'une mission"""
+  getMissionTrackingHistory(missionId: ID!): [MissionTracking!]!
 
   """Toutes les missions sans filtre (admin/agent)"""
   getMissionsForCardsByAgence: [MissionCardType!]!
@@ -824,6 +893,14 @@ enum TypeVehicule {
   VU_20M3
   VU_25M3
   VU_30M3
+}
+
+input UpdateLocationInput {
+  accuracy: Float
+  latitude: Float!
+  longitude: Float!
+  missionId: ID!
+  timestamp: DateTime!
 }
 
 input UploadMissionPhotosInput {
