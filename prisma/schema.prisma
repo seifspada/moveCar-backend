@@ -780,17 +780,16 @@ model Mission {
 }
 
 model MissionFavori {
-  adherentId Int
-  missionId  String   // ✅ String car Mission.id est uuid()
-  createdAt  DateTime @default(now())
+  adherentId Int      @map("adherent_id")  // ✅ mappe vers le vrai nom SQL
+  missionId  String   @map("mission_id")   // ✅ mappe vers le vrai nom SQL
+  createdAt  DateTime @default(now()) @map("created_at")
 
   adherent Adherent @relation(fields: [adherentId], references: [id], onDelete: Cascade)
   mission  Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
 
-  @@id([adherentId, missionId])  // ✅ clé composite, pas d'id séparé
-  @@map("mission_favoris")
+  @@id([adherentId, missionId])
+  @@map("mission_favoris")  // ✅ mappe vers le vrai nom de la table SQL
 }
-
 // ============================================
 // ⏰ DISPONIBILITE
 // ============================================
