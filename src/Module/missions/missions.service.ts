@@ -562,35 +562,40 @@ console.log('📍 adresseArrivee:', adresseArrivee.latitude, adresseArrivee.long
   return mission as any;
 }
 
-  async findMissionById(id: string) {
-    const mission = await this.prisma.mission.findUnique({
-      where: { id },
-      include: {
-        agent: true,         // ✅ partenaire → agent
-        vehicule: true,
-        adresseDepart: true,
-        adresseArrivee: true,
-        disponibilite: true,
-        calculs: true,
-        notifications: true,
-        documents: {
-          include: { fichiers: true },
+async findMissionById(id: string) {
+  const mission = await this.prisma.mission.findUnique({
+    where: { id },
+    include: {
+      agent: true,
+      vehicule: true,
+      adresseDepart: true,
+      adresseArrivee: true,
+      disponibilite: true,
+      calculs: true,
+      notifications: true,
+      documents: { include: { fichiers: true } },
+      partenaire: {
+        include: {
+          demandeInitiale: {        // ← ajouter
+            select: { id: true },
+          },
         },
       },
-    });
+    },
+  });
 
-    if (!mission) return null;
+  if (!mission) return null;
 
-    return {
-      ...mission,
-      calculs: mission.calculs ? {
-        ...mission.calculs,
-        distanceKm:   mission.calculs.distanceKm.toNumber(),
-        fraisPeage:   mission.calculs.fraisPeage.toNumber(),
-        montantTotal: mission.calculs.montantTotal.toNumber(),
-      } : null,
-    };
-  }
+  return {
+    ...mission,
+    calculs: mission.calculs ? {
+      ...mission.calculs,
+      distanceKm:   mission.calculs.distanceKm.toNumber(),
+      fraisPeage:   mission.calculs.fraisPeage.toNumber(),
+      montantTotal: mission.calculs.montantTotal.toNumber(),
+    } : null,
+  };
+}
 
   async obtenirDetailsMission(missionId: string): Promise<MissionDetailsType> {
     try {
