@@ -29,7 +29,29 @@ class AgentMissionEntity {
   @Field({ nullable: true })
   photo?: string;
 }
+@ObjectType()
+export class ContratTarificationEntity {
+  @Field(() => Float, { nullable: true })
+  prixParKm: number;
 
+  @Field(() => Float, { nullable: true })
+  depassementKilometrage: number;
+
+  @Field(() => Float, { nullable: true })
+  retardSansAvertissement: number;
+
+  @Field(() => Float, { nullable: true })
+  restitutionAutreEndroit: number;
+}
+
+@ObjectType()
+class PartenaireMissionEntity {
+  @Field(() => Int)
+  id: number;
+
+  @Field()
+  entiteGroupe: string;
+}
 
 @ObjectType()
 class VehiculeMissionEntity {
@@ -196,6 +218,9 @@ export class MissionEntity {
   @Field()
   dateModification: Date;
 
+  @Field(() => PartenaireMissionEntity, { nullable: true })
+  partenaire?: PartenaireMissionEntity;
+
   // ✅ partenaire → agent (nullable car partenaireId est optionnel)
   @Field(() => AgentMissionEntity)
   agent: AgentMissionEntity;
@@ -220,4 +245,7 @@ export class MissionEntity {
 
   @Field(() => [DocumentEntity])
   documents: DocumentEntity[];
+
+   @Field(() => ContratTarificationEntity, { nullable: true })
+  contrat?: ContratTarificationEntity;
 }

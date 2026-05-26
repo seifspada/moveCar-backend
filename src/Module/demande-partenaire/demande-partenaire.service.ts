@@ -854,4 +854,20 @@ async getContratTarification(demandeId: number) {
   return contrat;
 }
 
+async getContratTarificationByPartenaire(partenaireId: number) {
+  const contrat = await this.prisma.contratPartenaire.findFirst({
+    where: {
+      demandePartenaire: { partenaireId },
+    },
+    select: {
+      prixParKm:               true,
+      depassementKilometrage:  true,
+      retardSansAvertissement: true,
+      restitutionAutreEndroit: true,
+    },
+  });
+
+  return contrat;
+}
+
 }

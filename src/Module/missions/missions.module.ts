@@ -9,12 +9,14 @@ import { AlertesModule } from '../alertes/alertes.module';
 import { GeoService } from '../geo/geo.service';
 import { GeoModule } from '../geo/geo.module';
 import { PrismaModule } from '../../prisma/prisma.module';
+import { DemandePartenaireModule } from '../demande-partenaire/demande-partenaire.module';
 @Module({
   imports: [
     PrismaModule,
     AlertesModule,
     GeoModule ,
     RouteCalculatorModule,
+    DemandePartenaireModule,
     HttpModule,  // ✅ Ajouter HttpModule
     MulterModule.register({
       dest: './uploads/documents',

@@ -14,6 +14,7 @@ import { AlertesService } from '../alertes/alertes.service';
 import { SearchByPositionInput, SearchByTrajetInput } from './types/mission-search-filters.input';
 import { GeoService } from '../geo/geo.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { DemandePartenaireService } from '../demande-partenaire/demande-partenaire.service';
 
 
 export type MissionWithRelations = Mission & {
@@ -52,6 +53,7 @@ export class MissionsService {
     private readonly alertesService: AlertesService,
     private readonly geoService: GeoService,
     private readonly httpService: HttpService,
+    private readonly demandePartenaireService: DemandePartenaireService,
   ) {}
 
 
@@ -573,12 +575,13 @@ async findMissionById(id: string) {
       disponibilite: true,
       calculs: true,
       notifications: true,
-      documents: { include: { fichiers: true } },
+      documents: {
+        include: { fichiers: true },
+      },
       partenaire: {
-        include: {
-          demandeInitiale: {        // ← ajouter
-            select: { id: true },
-          },
+        select: {
+          id: true,
+          entiteGroupe: true,
         },
       },
     },
@@ -586,8 +589,14 @@ async findMissionById(id: string) {
 
   if (!mission) return null;
 
+  // Récupérer le contrat via partenaireId déjà sur la mission
+  const contrat = mission.partenaireId
+    ? await this.demandePartenaireService.getContratTarificationByPartenaire(mission.partenaireId)
+    : null;
+
   return {
     ...mission,
+    contrat,
     calculs: mission.calculs ? {
       ...mission.calculs,
       distanceKm:   mission.calculs.distanceKm.toNumber(),

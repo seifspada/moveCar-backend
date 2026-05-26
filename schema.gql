@@ -108,6 +108,20 @@ input CompleteMissionInput {
   missionId: ID!
 }
 
+type ContratTarificationEntity {
+  depassementKilometrage: Float
+  prixParKm: Float
+  restitutionAutreEndroit: Float
+  retardSansAvertissement: Float
+}
+
+type ContratTarificationType {
+  depassementKilometrage: Float
+  prixParKm: Float
+  restitutionAutreEndroit: Float
+  retardSansAvertissement: Float
+}
+
 input CreateAlerteGeographiqueInput {
   dateDepart: String
   dateDepartMax: String
@@ -284,12 +298,14 @@ type MissionEntity {
   agent: AgentMissionEntity!
   calculs: CalculEntity
   commentaire: String
+  contrat: ContratTarificationEntity
   dateCreation: DateTime!
   dateModification: DateTime!
   disponibilite: DisponibiliteEntity
   documents: [DocumentEntity!]!
   id: ID!
   notifications: [NotificationEntity!]!
+  partenaire: PartenaireMissionEntity
   statut: StatutMission!
   vehicule: VehiculeMissionEntity!
 }
@@ -462,6 +478,11 @@ type ParTypeAlertes {
   trajets: Int!
 }
 
+type PartenaireMissionEntity {
+  entiteGroupe: String!
+  id: Int!
+}
+
 type PartenaireNavbar {
   email: String!
   entite: String!
@@ -581,6 +602,7 @@ type Query {
 
   """Vérifier les nouvelles missions correspondant à mes alertes"""
   checkNouvellesMissions: [AlerteGeographique!]!
+  contratTarification(demandeId: Int!): ContratTarificationType!
 
   """Recupere les missions en cours avec leur derniere position GPS"""
   getActiveMissionsMap: [ActiveMissionMap!]!
