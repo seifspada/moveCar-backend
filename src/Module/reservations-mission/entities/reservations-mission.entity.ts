@@ -27,22 +27,22 @@ export class ReservationMissionEntity {
   @Field(() => MissionEntity, { nullable: true })
   mission?: MissionEntity;
 
-  @Field(() => Int)
+  // ✅ adherentId retiré du @Field — non utilisé côté Flutter
   adherentId: number;
 
   @Field(() => AdherentSimpleEntity, { nullable: true })
   adherent?: AdherentSimpleEntity;
 
-  // ✅ FIX: nouveau statut enum (ACCEPTED_BY_AGENT, CONFIRMED_BY_ADHERENT, ANNULATION_DEMANDEE)
   @Field(() => StatutReservation)
   statut: StatutReservation;
 
-  // ✅ Nouveau — statut avant ANNULATION_DEMANDEE (pour rollback)
   @Field(() => StatutReservation, { nullable: true })
   statutPrecedent?: StatutReservation;
 
   @Field()
   numeroReservation: string;
+
+  // ─── Dates de trajet ──────────────────────────────────────
 
   @Field()
   dateDepart: Date;
@@ -50,14 +50,18 @@ export class ReservationMissionEntity {
   @Field()
   heureDepart: string;
 
-  @Field()
-  dateArrivee: Date;
+  // ✅ FIX — nullable pour cohérence avec Flutter (String? dateArrivee)
+  @Field({ nullable: true })
+  dateArrivee?: Date;
 
-  @Field()
-  heureArrivee: string;
+  // ✅ FIX — nullable pour cohérence avec Flutter (String? heureArrivee)
+  @Field({ nullable: true })
+  heureArrivee?: string;
 
   @Field(() => Int, { nullable: true })
   dureeEstimee?: number;
+
+  // ─── Commentaires (non utilisés Flutter — gardés pour agent/admin) ───
 
   @Field({ nullable: true })
   commentaireAdherent?: string;
@@ -65,21 +69,21 @@ export class ReservationMissionEntity {
   @Field({ nullable: true })
   commentaireAgent?: string;
 
-  // ─── Motifs ───────────────────────────────
+  // ─── Motifs ───────────────────────────────────────────────
 
   @Field({ nullable: true })
   motifRefus?: string;
 
-  // ✅ Nouveau — cause du 400 Bad Request
   @Field({ nullable: true })
   motifAnnulation?: string;
 
-  // ✅ Nouveau — "ADHERENT" | "AGENT"
   @Field({ nullable: true })
   annulePar?: string;
 
-  // ─── Montants ─────────────────────────────
+  // ─── Montants ─────────────────────────────────────────────
 
+  // ✅ Float non-nullable cohérent avec Prisma Decimal non-nullable
+  // Le service garantit toujours une valeur (|| 0)
   @Field(() => Float)
   montantTotal: number;
 
@@ -89,29 +93,28 @@ export class ReservationMissionEntity {
   @Field(() => Float)
   distanceKm: number;
 
-  // ─── Dates ────────────────────────────────
+  // ─── Dates système ────────────────────────────────────────
 
+  // ✅ dateCreation non-nullable — @default(now()) en Prisma
   @Field()
   dateCreation: Date;
 
-  @Field()
+  // ✅ dateModification retiré du @Field — non utilisé côté Flutter
   dateModification: Date;
 
-  @Field({ nullable: true })
+  // ✅ Ces champs existent en Prisma mais non utilisés Flutter
+  // Gardés sans @Field pour éviter exposition inutile
   dateValidation?: Date;
-
-  @Field({ nullable: true })
   dateRefus?: Date;
 
-  // ✅ Nouveau — étape 1 : agent accepte
+  // ─── Dates workflow réservation ───────────────────────────
+
   @Field({ nullable: true })
   dateAcceptationAgent?: Date;
 
-  // ✅ Nouveau — étape 2 : adhérent confirme
   @Field({ nullable: true })
   dateConfirmationAdherent?: Date;
 
-  // ✅ Nouveau — date annulation effective
   @Field({ nullable: true })
   dateAnnulation?: Date;
 }

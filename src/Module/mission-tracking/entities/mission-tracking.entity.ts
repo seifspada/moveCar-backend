@@ -1,5 +1,15 @@
 import { ObjectType, Field, ID, Float, Int } from '@nestjs/graphql';
 
+
+export enum IncidentType {
+  DEVIATION_GPS = 'DÉVIATION_GPS',
+  VITESSE_EXCESSIVE = 'VITESSE_EXCESSIVE',
+  ARRET_PROLONGE = 'ARRÊT_PROLONGÉ',
+  DETOUR_INJUSTIFIE = 'DÉTOUR_INJUSTIFIÉ',
+  ANOMALIE_CARBURANT = 'ANOMALIE_CARBURANT',
+}
+
+
 @ObjectType()
 export class MissionTracking {
   @Field(() => ID)
@@ -115,6 +125,92 @@ export class MissionCompletion {
 
   @Field(() => String, { nullable: true })
   invalidationReason?: string;
+
+  @Field(() => Date)
+  dateCreation: Date;
+}
+
+
+@ObjectType()
+export class MissionIncidentMediaEntity  {
+  @Field(() => ID)
+  id: string;
+
+  @Field(() => ID)
+  incidentId: string;
+
+  @Field(() => Float)
+  cheminFichier: string;
+
+  @Field(() => Float)
+  tailleOctets: number;
+
+  @Field(() => Int)
+  ordre: number;
+
+
+  @Field(() => Date)
+  dateCreation: Date;
+}
+
+@ObjectType()
+export class MissionIncidentResult {
+  @Field(() => ID)
+  id: string;
+
+  @Field(() => ID)
+  sessionId: string;
+
+  // Type et description
+  @Field(() => IncidentType)
+  typeIncident: IncidentType;
+
+  @Field()
+  description: string;
+
+  // Localisation au moment de l'incident
+  @Field(() => Float)
+  latitude: number;
+
+  @Field(() => Float)
+  longitude: number;
+
+  // Photos liées (max 3)
+  @Field(() => [MissionIncidentMediaEntity])
+  medias: MissionIncidentMediaEntity[];
+
+  // Résolution
+  @Field({ nullable: true })
+  resolvedBy: string | null;
+
+  @Field({ nullable: true })
+  resolutionNotes: string | null;
+
+  @Field(() => Date, { nullable: true })
+  dateResolution: Date | null;
+
+  // Traçabilité
+  @Field(() => Date)
+  dateCreation: Date;
+}
+
+
+@ObjectType()
+export class MissionIncidentMediaResult {
+  @Field(() => ID)
+  id: string;
+
+  @Field(() => ID)
+  sessionId: string;
+
+  @Field()
+  cheminFichier: string;
+
+  @Field(() => Int)
+  tailleOctets: number;
+
+  @Field(() => Int)
+  ordre: number;
 
   @Field(() => Date)
   dateCreation: Date;

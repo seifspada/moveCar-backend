@@ -925,8 +925,9 @@ model ReservationMission {
   dateDepart  DateTime
   heureDepart String   @db.VarChar(5)
 
-  dateArrivee  DateTime
-  heureArrivee String   @db.VarChar(5)
+  // ✅ FIX — nullable pour cohérence avec entity backend et Flutter
+  dateArrivee  DateTime?
+  heureArrivee String?  @db.VarChar(5)
 
   dureeEstimee Int?
 
@@ -947,11 +948,11 @@ model ReservationMission {
   dateConfirmationAdherent DateTime?
   dateAnnulation           DateTime?
   motifAnnulation          String?            @db.Text
-  annulePar                String? // "ADHERENT" | "AGENT"
-  statutPrecedent          StatutReservation? // ✅ pour restauration après refus demande annulation
+  annulePar                String?
+  statutPrecedent          StatutReservation?
 
-  preTripInspection PreTripInspection? // ✅ NOUVELLE LIGNE
-missionSession MissionSession?
+  preTripInspection PreTripInspection?
+  missionSession    MissionSession?
 
   @@index([missionId])
   @@index([adherentId])
@@ -1346,7 +1347,7 @@ model MissionIncident {
   longitude Float
 
   // ── Preuve ───────────────────────────────
-  photoIncident String? @db.VarChar(500)  // Photo incident si prise
+  medias MissionIncidentMedia[]
 
   // ── Résolution ───────────────────────────
   resolvedBy        String?
@@ -1360,4 +1361,21 @@ model MissionIncident {
   @@index([typeIncident])
   @@index([dateCreation])
   @@map("mission_incidents")
+}
+
+
+model MissionIncidentMedia {
+  id         String          @id @default(cuid())
+  incidentId String
+  incident   MissionIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  cheminFichier String  @db.VarChar(500)
+  tailleOctets  Int?
+  typeContenu   String? @db.VarChar(50)
+  ordre         Int     @default(0) // 0, 1, 2 — max 3
+
+  dateCreation DateTime @default(now())
+
+  @@index([incidentId])
+  @@map("mission_incident_medias")
 }
