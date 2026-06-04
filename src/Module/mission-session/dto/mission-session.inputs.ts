@@ -77,12 +77,14 @@ export class StartMissionSessionInput {
   kilometrageDebut?: number;
 
   // ✅ PHOTOS OBLIGATOIRES avant le démarrage
-  @Field(() => [MediaUploadInput], { nullable: true })
-  @IsOptional()
+  @Field(() => [MediaUploadInput])
   @IsArray()
+  @ArrayMinSize(8, {
+    message: 'Au moins 8 photos pre-depart sont obligatoires.',
+  })
   @ValidateNested({ each: true })
   @Type(() => MediaUploadInput)
-  photosPre?: MediaUploadInput[];
+  photosPre: MediaUploadInput[];
 }
 
 // ─────────────────────────────────────────
@@ -119,12 +121,14 @@ export class EndMissionSessionInput {
   commentaireFin?: string;
 
   // ✅ PHOTOS FINALES obligatoires après livraison
-  @Field(() => [MediaUploadInput], { nullable: true })
-  @IsOptional()
+  @Field(() => [MediaUploadInput])
   @IsArray()
+  @ArrayMinSize(7, {
+    message: 'Au moins 7 photos post-livraison sont obligatoires.',
+  })
   @ValidateNested({ each: true })
   @Type(() => MediaUploadInput)
-  photosPost?: MediaUploadInput[];
+  photosPost: MediaUploadInput[];
 }
 
 // ─────────────────────────────────────────

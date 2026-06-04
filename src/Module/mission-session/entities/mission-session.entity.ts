@@ -1,6 +1,7 @@
 // src/Module/mission-session/entities/mission-session.entity.ts
 
 import { Field, Float, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
+import { AdherentSimpleEntity } from '../../reservations-mission/entities/adherent-simple.entity';
 import { StatutSession as PrismaStatutSession } from '@prisma/client'; // ✅ IMPORT
 import { MissionSessionMediaEntity } from './mission-session-media.entity'; // ✅ IMPORT
 
@@ -23,6 +24,9 @@ export class MissionSessionEntity {
 
   @Field()
   missionId: string;
+
+  @Field(() => AdherentSimpleEntity, { nullable: true })
+  adherent?: AdherentSimpleEntity | null;
 
   // ── Consentement ───────────────────────
   @Field(() => Boolean)

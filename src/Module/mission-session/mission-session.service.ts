@@ -23,6 +23,16 @@ import * as path from 'path';
 export class MissionSessionService {
   private readonly logger = new Logger(MissionSessionService.name);
   private readonly uploadsDir = path.join(process.cwd(), 'uploads', 'mission-sessions');
+  private readonly adherentForResponse = {
+    select: {
+      id: true,
+      nom: true,
+      prenom: true,
+      telephone: true,
+      statut: true,
+      user: { select: { name: true, email: true, photo: true } },
+    },
+  };
 
   constructor(private readonly prisma: PrismaService) {
     if (!fs.existsSync(this.uploadsDir)) {
@@ -122,6 +132,7 @@ export class MissionSessionService {
   private mapToEntity(data: any): MissionSessionEntity {
     return {
       ...data,
+      adherent: data.adherent ?? data.reservation?.adherent ?? null,
       statut: data.statut as any,
       medias: data.medias?.map((m: any) => this.mapMediaToEntity(m)) || [],
     };
@@ -156,7 +167,7 @@ export class MissionSessionService {
     }
 
     const photosPreValidation = this.validatePhotosRequises(
-      (input.photosPre ?? []).map((photo) => photo.typeMedia),
+      input.photosPre.map((photo) => photo.typeMedia),
       this.PHOTOS_REQUISES_PRE_DEPART,
     );
 
@@ -210,7 +221,10 @@ export class MissionSessionService {
             create: [],
           },
         },
-        include: { medias: true },
+        include: {
+          medias: true,
+          reservation: { include: { adherent: this.adherentForResponse } },
+        },
       }),
       this.prisma.mission.update({
         where: { id: reservation.mission.id },
@@ -272,7 +286,7 @@ export class MissionSessionService {
         ...session.medias
           .filter((media) => media.etape === EtapeSession.POST_LIVRAISON)
           .map((media) => media.typeMedia as TypeMediaSession),
-        ...(input.photosPost ?? []).map((photo) => photo.typeMedia),
+        ...input.photosPost.map((photo) => photo.typeMedia),
       ],
       this.PHOTOS_REQUISES_POST_LIVRAISON,
     );
@@ -298,7 +312,10 @@ export class MissionSessionService {
           commentaireFin: input.commentaireFin ?? null,
           statut: 'TERMINEE',
         },
-        include: { medias: true },
+        include: {
+          medias: true,
+          reservation: { include: { adherent: this.adherentForResponse } },
+        },
       }),
       this.prisma.mission.update({
         where: { id: session.missionId },
@@ -496,7 +513,10 @@ export class MissionSessionService {
   ): Promise<MissionSessionEntity | null> {
     const session = await this.prisma.missionSession.findUnique({
       where: { reservationId },
-      include: { medias: true },
+      include: {
+        medias: true,
+        reservation: { include: { adherent: this.adherentForResponse } },
+      },
     });
 
     if (!session) return null;
