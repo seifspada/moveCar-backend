@@ -113,11 +113,11 @@ enum EtapeSession {
   @@map("etape_session")
 }
 enum IncidentType {
-  DÉVIATION_GPS           // Sortie de zone autorisée
-  VITESSE_EXCESSIVE       // Vitesse > limite
-  ARRÊT_PROLONGÉ          // Arrêt > X minutes
-  DÉTOUR_INJUSTIFIÉ       // Détour détecté
-  ANOMALIE_CARBURANT      // Consommation anormale
+  DEVIATION_GPS
+  VITESSE_EXCESSIVE
+  ARRET_PROLONGE
+  DETOUR_INJUSTIFIE
+  ANOMALIE_CARBURANT
 }
 enum TypeMediaSession {
   // ──── PRÉ-DÉPART (véhicule avant mission) ────

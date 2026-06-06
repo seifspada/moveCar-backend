@@ -248,87 +248,96 @@ export class MissionSessionService {
   // ============================================================
 
   async endSession(
-    input: EndMissionSessionInput,
-    userId: number,
-  ): Promise<MissionSessionEntity> {
-    const session = await this.prisma.missionSession.findUnique({
-      where: { id: input.sessionId },
-      include: {
-        reservation: {
-          include: {
-            adherent: { select: { id: true, userId: true } },
-          },
-        },
-        medias: true,
-      },
-    });
-
-    if (!session) {
-      throw new NotFoundException('Session introuvable.');
-    }
-
-    if (session.reservation.adherent.userId !== userId) {
-      throw new ForbiddenException('Cette session ne vous appartient pas.');
-    }
-
-    if (session.statut === 'TERMINEE') {
-      throw new ConflictException('Cette session est deja terminie.');
-    }
-
-    if (input.latitudeFin == null || input.longitudeFin == null) {
-      throw new BadRequestException(
-        'La position GPS est obligatoire pour terminer la mission.',
-      );
-    }
-
-    const photosPostValidation = this.validatePhotosRequises(
-      [
-        ...session.medias
-          .filter((media) => media.etape === EtapeSession.POST_LIVRAISON)
-          .map((media) => media.typeMedia as TypeMediaSession),
-        ...input.photosPost.map((photo) => photo.typeMedia),
-      ],
-      this.PHOTOS_REQUISES_POST_LIVRAISON,
-    );
-
-    if (!photosPostValidation.valide) {
-      throw new BadRequestException(
-        `Photos post-livraison manquantes : ${photosPostValidation.manquantes.join(', ')}`,
-      );
-    }
-
-    if (input.photosPost && input.photosPost.length > 0) {
-      await this.uploadPhotos(session.id, input.photosPost, EtapeSession.POST_LIVRAISON, userId);
-    }
-
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.missionSession.update({
-        where: { id: input.sessionId },
-        data: {
-          latitudeFin: input.latitudeFin,
-          longitudeFin: input.longitudeFin,
-          dateFin: new Date(),
-          kilometrageFin: input.kilometrageFin ?? null,
-          commentaireFin: input.commentaireFin ?? null,
-          statut: 'TERMINEE',
-        },
+  input: EndMissionSessionInput,
+  userId: number,
+): Promise<MissionSessionEntity> {
+  const session = await this.prisma.missionSession.findUnique({
+    where: { id: input.sessionId },
+    include: {
+      reservation: {
         include: {
-          medias: true,
-          reservation: { include: { adherent: this.adherentForResponse } },
+          adherent: { select: { id: true, userId: true } },
         },
-      }),
-      this.prisma.mission.update({
-        where: { id: session.missionId },
-        data: { statut: 'TERMINEE' },
-      }),
-    ]);
+      },
+      medias: true,
+    },
+  });
 
-    this.logger.log(
-      `Session ${input.sessionId} terminie pour mission ${session.missionId}`,
-    );
-
-    return this.mapToEntity(updated);
+  if (!session) {
+    throw new NotFoundException('Session introuvable.');
   }
+
+  if (session.reservation.adherent.userId !== userId) {
+    throw new ForbiddenException('Cette session ne vous appartient pas.');
+  }
+
+  if (session.statut === 'TERMINEE') {
+    throw new ConflictException('Cette session est deja terminie.');
+  }
+
+  if (input.latitudeFin == null || input.longitudeFin == null) {
+    throw new BadRequestException(
+      'La position GPS est obligatoire pour terminer la mission.',
+    );
+  }
+
+  const photosPostValidation = this.validatePhotosRequises(
+    [
+      ...session.medias
+        .filter((media) => media.etape === EtapeSession.POST_LIVRAISON)
+        .map((media) => media.typeMedia as TypeMediaSession),
+      ...input.photosPost.map((photo) => photo.typeMedia),
+    ],
+    this.PHOTOS_REQUISES_POST_LIVRAISON,
+  );
+
+  if (!photosPostValidation.valide) {
+    throw new BadRequestException(
+      `Photos post-livraison manquantes : ${photosPostValidation.manquantes.join(', ')}`,
+    );
+  }
+
+  // ── Upload uniquement les photos pas encore en DB ──
+  const existingPostTypes = session.medias
+    .filter((m) => m.etape === EtapeSession.POST_LIVRAISON)
+    .map((m) => m.typeMedia);
+
+  const photosAUploader = input.photosPost.filter(
+    (p) => !existingPostTypes.includes(p.typeMedia as any),
+  );
+
+  if (photosAUploader.length > 0) {
+    await this.uploadPhotos(session.id, photosAUploader, EtapeSession.POST_LIVRAISON, userId);
+  }
+
+  const [updated] = await this.prisma.$transaction([
+    this.prisma.missionSession.update({
+      where: { id: input.sessionId },
+      data: {
+        latitudeFin: input.latitudeFin,
+        longitudeFin: input.longitudeFin,
+        dateFin: new Date(),
+        kilometrageFin: input.kilometrageFin ?? null,
+        commentaireFin: input.commentaireFin ?? null,
+        statut: 'TERMINEE',
+      },
+      include: {
+        medias: true,
+        reservation: { include: { adherent: this.adherentForResponse } },
+      },
+    }),
+    this.prisma.mission.update({
+      where: { id: session.missionId },
+      data: { statut: 'TERMINEE' },
+    }),
+  ]);
+
+  this.logger.log(
+    `Session ${input.sessionId} terminie pour mission ${session.missionId}`,
+  );
+
+  return this.mapToEntity(updated);
+}
 
   // ============================================================
   // PHOTOS
@@ -373,10 +382,10 @@ export class MissionSessionService {
 
     for (const media of medias) {
       if (existingTypes.has(media.typeMedia)) {
-        throw new ConflictException(
-          `Le media ${media.typeMedia} existe deja pour cette etape.`,
-        );
-      }
+  this.logger.warn(`Media ${media.typeMedia} deja existant, ignoré.`);
+  continue;  // ← saute cette photo, passe à la suivante
+}
+
 
       try {
         const { cheminFichier, tailleOctets, typeContenu } = await this.saveMediaFile(

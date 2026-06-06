@@ -2,7 +2,6 @@
 
 import { Field, Float, ID, Int, ObjectType, registerEnumType } from '@nestjs/graphql';
 import { AdherentSimpleEntity } from '../../reservations-mission/entities/adherent-simple.entity';
-import { StatutSession as PrismaStatutSession } from '@prisma/client'; // ✅ IMPORT
 import { MissionSessionMediaEntity } from './mission-session-media.entity'; // ✅ IMPORT
 
 // ✅ Utiliser directement l'enum Prisma
