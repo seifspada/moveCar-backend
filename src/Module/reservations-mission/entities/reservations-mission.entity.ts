@@ -10,6 +10,7 @@ import {
 import { AdherentSimpleEntity } from './adherent-simple.entity';
 import { MissionEntity } from '../../missions/types/mission-entity.type';
 import { StatutReservation } from '@prisma/client';
+import { MissionSessionEntity } from '../../mission-session/entities/mission-session.entity';
 
 registerEnumType(StatutReservation, {
   name: 'StatutReservation',
@@ -117,4 +118,8 @@ export class ReservationMissionEntity {
 
   @Field({ nullable: true })
   dateAnnulation?: Date;
+
+   // ✅ AJOUTER ICI
+  @Field(() => MissionSessionEntity, { nullable: true })
+  missionSession?: MissionSessionEntity;
 }

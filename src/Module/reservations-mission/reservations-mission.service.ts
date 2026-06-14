@@ -49,37 +49,38 @@ export class ReservationsMissionService {
   }
 
   // ✅ PUBLIC pour que le resolver puisse l'utiliser dans getReservationsByMissionForAdherent
-  get reservationInclude() {
-    return {
-      adherent: {
-        select: {
-          id: true,
-          nom: true,
-          prenom: true,
-          telephone: true,
-          statut: true,
-          userId: true,
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              photo: true,
-            },
+get reservationInclude() {
+  return {
+    adherent: {
+      select: {
+        id: true,
+        nom: true,
+        prenom: true,
+        telephone: true,
+        statut: true,
+        userId: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            photo: true,
           },
         },
       },
-      mission: {
-        include: {
-          vehicule: true,
-          adresseDepart: true,
-          adresseArrivee: true,
-          agent: true,
-          calculs: true,
-        },
+    },
+    mission: {
+      include: {
+        vehicule: true,
+        adresseDepart: true,
+        adresseArrivee: true,
+        agent: true,
+        calculs: true,
       },
-    };
-  }
+    },
+    missionSession: true, // ✅ ajouter uniquement cette ligne
+  };
+}
 
   /**
    * ✅ Vérifier et incrémenter le compteur d'annulations mensuel

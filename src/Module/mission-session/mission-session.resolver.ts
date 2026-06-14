@@ -69,13 +69,7 @@ export class MissionSessionResolver {
     nullable: true,
     description: "Récupère la session d'une réservation",
   })
-  @Roles(Role.ADHERENT)
-  async getMissionSession(
-    @Args('reservationId') reservationId: string,
-    @CurrentUser() user: { id: number; role: Role },
-  ): Promise<MissionSessionEntity | null> {
-    return this.service.getSessionByReservation(reservationId, user.id);
-  }
+ 
 
   @Query(() => [MissionSessionMediaEntity], {
     description: 'Récupère les photos d\'une session (pré ou post mission)',
@@ -109,5 +103,15 @@ async validatePostMissionPhotos(
   @CurrentUser() user: { id: number; role: Role },
 ): Promise<PhotoValidationResult> {
   return this.service.validatePostPhotos(sessionId, user.id);
+}
+@Query(() => [MissionSessionEntity], {
+  description: "Récupère les sessions de l'adhérent, filtrables par statut",
+})
+@Roles(Role.ADHERENT)
+async getMyMissionSessions(
+  @CurrentUser() user: { id: number; role: Role },
+  @Args('statut', { nullable: true }) statut?: string,
+): Promise<MissionSessionEntity[]> {
+  return this.service.getMissionsByAdherent(user.id, statut);
 }
 }

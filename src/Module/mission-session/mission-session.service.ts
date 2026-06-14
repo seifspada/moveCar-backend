@@ -541,4 +541,22 @@ export class MissionSessionService {
 
     return this.mapToEntity(session);
   }
+
+async getMissionsByAdherent(
+  userId: number,
+  statut?: string,
+): Promise<MissionSessionEntity[]> {
+  const sessions = await this.prisma.missionSession.findMany({
+    where: {
+      reservation: { adherent: { userId } },
+      ...(statut && { statut: statut as any }),
+    },
+    include: {
+      medias: true,
+      reservation: { include: { adherent: this.adherentForResponse } },
+    },
+    orderBy: { dateCreation: 'desc' },
+  });
+  return sessions.map((s) => this.mapToEntity(s));
+}
 }
