@@ -63,8 +63,13 @@ export class ActiveMissionMap {
   @Field(() => String)
   convoyeurName: string;
 
+  // Statut GPS/session (compatibilité ancien code)
   @Field(() => String)
   status: string;
+
+  // ✅ NOUVEAU : statut métier pour le frontend (EN_COURS, TERMINEE, PROBLEME_TRAJET…)
+  @Field(() => String)
+  statut: string;
 
   @Field(() => Float)
   latitude: number;
@@ -72,11 +77,19 @@ export class ActiveMissionMap {
   @Field(() => Float)
   longitude: number;
 
-  @Field(() => Float)
-  latitudeArrivee: number;
+  // ✅ NOUVEAU : coordonnées départ (nullable car pas toujours disponibles)
+  @Field(() => Float, { nullable: true })
+  latitudeDepart?: number;
 
-  @Field(() => Float)
-  longitudeArrivee: number;
+  @Field(() => Float, { nullable: true })
+  longitudeDepart?: number;
+
+  // Existant — passé en nullable pour cohérence avec le service
+  @Field(() => Float, { nullable: true })
+  latitudeArrivee?: number;
+
+  @Field(() => Float, { nullable: true })
+  longitudeArrivee?: number;
 
   @Field(() => Float, { nullable: true })
   accuracy?: number;
@@ -86,6 +99,16 @@ export class ActiveMissionMap {
 
   @Field(() => Boolean)
   isDeviated: boolean;
+
+  // ✅ NOUVEAU : champs évaluation (sur Mission directement)
+  @Field(() => Float, { nullable: true })
+  noteAgent?: number;
+
+  @Field(() => Float, { nullable: true })
+  scoreLogistique?: number;
+
+  @Field(() => String, { nullable: true })
+  scorePredictedLabel?: string;
 }
 
 @ObjectType()

@@ -50,7 +50,6 @@ export class MissionTrackingService {
 
   /**
    * Enregistre une mise à jour de position GPS pour une mission en cours
-   * MODIFIÉ : filtre réservation élargi + passe Mission en PROBLEME_TRAJET si déviation
    */
   async updateLocation(
     input: UpdateLocationInput,
@@ -60,7 +59,6 @@ export class MissionTrackingService {
       where: { id: input.missionId },
       include: {
         reservations: {
-          // MODIFIÉ : suppression du filtre statut strict
           include: { adherent: true },
         },
         sessions: {
@@ -81,7 +79,6 @@ export class MissionTrackingService {
       );
     }
 
-    // MODIFIÉ : vérification adherent sans filtre statut réservation
     const reservation = mission.reservations.find(
       (r) => r.adherent.userId === userId,
     );
@@ -123,7 +120,6 @@ export class MissionTrackingService {
       },
     });
 
-    // MODIFIÉ : passe la mission en PROBLEME_TRAJET si déviation détectée
     if (isDeviated) {
       this.logger.warn(`Déviation GPS pour mission ${input.missionId}`);
       await this.prisma.mission.update({
@@ -158,20 +154,30 @@ export class MissionTrackingService {
   }
 
   /**
-   * Récupère la dernière position de chaque mission en cours pour la carte agent
-   * MODIFIÉ : fallback admin pour voir toutes les missions EN_COURS
+   * Récupère toutes les missions EN_COURS + TERMINEE récentes (< 24h) pour la carte agent
+   * Les missions TERMINEE sont incluses pour permettre l'évaluation par l'agent
    */
   async getActiveMissionsMap(userId: number): Promise<ActiveMissionMap[]> {
-    // MODIFIÉ : vérifier d'abord si c'est un admin
     const admin = await this.prisma.admin.findUnique({ where: { userId } });
 
-    let sessionFilter: any = {
-      statut: 'EN_COURS',
-      mission: { statut: 'EN_COURS' },
+    // Missions terminées depuis moins de 24h restent visibles sur la carte
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    let missionFilter: any = {
+      statut: { in: ['EN_COURS', 'PROBLEME_TRAJET', 'TERMINEE'] },
+    };
+
+    const sessionStatutFilter = {
+      OR: [
+        { statut: 'EN_COURS' as any },
+        {
+          statut: 'TERMINEE' as any,
+          dateFin: { gte: since24h },
+        },
+      ],
     };
 
     if (!admin) {
-      // Pas admin → vérifier que c'est bien un agent
       const agent = await this.prisma.agent.findUnique({
         where: { userId },
         select: { id: true },
@@ -181,27 +187,29 @@ export class MissionTrackingService {
         throw new ForbiddenException('Accès refusé.');
       }
 
-      // Filtrer uniquement les missions de cet agent
-      sessionFilter = {
-        statut: 'EN_COURS',
-        mission: {
-          statut: 'EN_COURS',
-          agentId: agent.id,
-        },
+      missionFilter = {
+        statut: { in: ['EN_COURS', 'PROBLEME_TRAJET', 'TERMINEE'] },
+        agentId: agent.id,
       };
     }
 
     const sessions = await this.prisma.missionSession.findMany({
-      where: sessionFilter,
+      where: {
+        ...sessionStatutFilter,
+        mission: missionFilter,
+      },
       include: {
+        // gpsHistory est bien une relation sur MissionSession
         gpsHistory: {
           orderBy: { timestamp: 'desc' },
           take: 1,
         },
+        // noteAgent / scoreLogistique / scorePredictedLabel sont sur Mission directement
         mission: {
           include: {
             vehicule: true,
             adresseArrivee: true,
+            adresseDepart: true,
           },
         },
         reservation: {
@@ -213,29 +221,45 @@ export class MissionTrackingService {
       orderBy: { dateDebut: 'desc' },
     });
 
-    return sessions.map((session) => {
-      const lastGps = session.gpsHistory[0];
+    // Dédupliquer : garder une seule session par missionId (la plus récente)
+    const seenMissions = new Set<string>();
 
-      return {
-        missionId: session.missionId,
-        sessionId: session.id,
-        vehicleName: `${session.mission.vehicule.marqueModele} - ${session.mission.vehicule.immatriculation}`,
-        convoyeurName: `${session.reservation.adherent.prenom} ${session.reservation.adherent.nom}`,
-        status: session.mission.statut,
-        latitude: lastGps?.latitude ?? session.latitudeDebut,
-        longitude: lastGps?.longitude ?? session.longitudeDebut,
-        latitudeArrivee: session.mission.adresseArrivee.latitude,
-        longitudeArrivee: session.mission.adresseArrivee.longitude,
-        accuracy: lastGps?.accuracy ?? null,
-        lastGpsAt: lastGps?.timestamp ?? session.dateDebut,
-        isDeviated: lastGps?.isDeviated ?? false,
-      };
-    });
+    return sessions
+      .filter((session) => {
+        if (seenMissions.has(session.missionId)) return false;
+        seenMissions.add(session.missionId);
+        return true;
+      })
+      .map((session) => {
+        const lastGps = session.gpsHistory[0];
+
+        return {
+          missionId: session.missionId,
+          sessionId: session.id,
+          vehicleName: `${session.mission.vehicule.marqueModele} - ${session.mission.vehicule.immatriculation}`,
+          convoyeurName: `${session.reservation.adherent.prenom} ${session.reservation.adherent.nom}`,
+          // status pour compatibilité ancien code, statut pour logique frontend
+          status: session.mission.statut,
+          statut: session.mission.statut,
+          latitude: lastGps?.latitude ?? session.latitudeDebut,
+          longitude: lastGps?.longitude ?? session.longitudeDebut,
+          latitudeDepart: session.mission.adresseDepart?.latitude ?? null,
+          longitudeDepart: session.mission.adresseDepart?.longitude ?? null,
+          latitudeArrivee: session.mission.adresseArrivee?.latitude ?? null,
+          longitudeArrivee: session.mission.adresseArrivee?.longitude ?? null,
+          accuracy: lastGps?.accuracy ?? null,
+          lastGpsAt: lastGps?.timestamp ?? session.dateDebut,
+          isDeviated: lastGps?.isDeviated ?? false,
+          // Ces 3 champs sont sur Mission directement (pas sur MissionCompletion)
+          noteAgent: session.mission.noteAgent ?? null,
+          scoreLogistique: session.mission.scoreLogistique ?? null,
+          scorePredictedLabel: session.mission.scorePredictedLabel ?? null,
+        };
+      });
   }
 
   /**
    * Termine la mission et valide le trajet
-   * MODIFIÉ : met aussi à jour MissionSession.statut → TERMINEE
    */
   async completeMission(
     input: CompleteMissionInput,
@@ -276,7 +300,6 @@ export class MissionTrackingService {
     }
 
     if (trackings.length > 0) {
-      // Calcul maxDeviation : distance max entre points consécutifs
       for (let i = 1; i < trackings.length; i++) {
         const dist = this.calculateDistance(
           trackings[i - 1].latitude,
@@ -332,13 +355,11 @@ export class MissionTrackingService {
 
     const newStatut = completion.completed ? 'TERMINEE' : 'PROBLEME_TRAJET';
 
-    // MODIFIÉ : transaction pour mettre à jour Mission ET MissionSession
     await this.prisma.$transaction([
       this.prisma.mission.update({
         where: { id: input.missionId },
         data: { statut: newStatut as any },
       }),
-      // AJOUT : fermer la session active
       this.prisma.missionSession.updateMany({
         where: { missionId: input.missionId, statut: 'EN_COURS' },
         data: { statut: 'TERMINEE' },
@@ -369,13 +390,9 @@ export class MissionTrackingService {
   }
 
   // ============================================================
-  // NOUVELLE MÉTHODE : VÉRIFICATION D'ARRIVÉE
+  // VÉRIFICATION D'ARRIVÉE
   // ============================================================
 
-  /**
-   * NOUVEAU : Vérifie si le convoyeur est arrivé à destination
-   * Appelé par Flutter toutes les 30s
-   */
   async checkArrival(
     sessionId: string,
     latitude: number,
@@ -386,14 +403,10 @@ export class MissionTrackingService {
       where: { id: sessionId },
       include: {
         reservation: {
-          include: {
-            adherent: true,
-          },
+          include: { adherent: true },
         },
         mission: {
-          include: {
-            adresseArrivee: true,
-          },
+          include: { adresseArrivee: true },
         },
       },
     });
@@ -435,12 +448,9 @@ export class MissionTrackingService {
   }
 
   // ============================================================
-  // NOUVELLES MÉTHODES : GESTION DES INCIDENTS
+  // GESTION DES INCIDENTS
   // ============================================================
 
-  /**
-   * NOUVEAU : Signale un incident en route avec jusqu'à 3 photos
-   */
   async reportIncident(
     input: {
       sessionId: string;
@@ -448,17 +458,14 @@ export class MissionTrackingService {
       description: string;
       latitude: number;
       longitude: number;
-      photos?: string[]; // base64[], max 3
+      photos?: string[];
     },
     userId: number,
   ): Promise<MissionIncidentResult> {
-    // Vérifier la session
     const session = await this.prisma.missionSession.findUnique({
       where: { id: input.sessionId },
       include: {
-        reservation: {
-          include: { adherent: true },
-        },
+        reservation: { include: { adherent: true } },
         mission: true,
       },
     });
@@ -477,14 +484,12 @@ export class MissionTrackingService {
       );
     }
 
-    // Valider le nombre de photos
     if (input.photos && input.photos.length > MAX_INCIDENT_PHOTOS) {
       throw new BadRequestException(
         `Maximum ${MAX_INCIDENT_PHOTOS} photos par incident.`,
       );
     }
 
-    // Créer l'incident
     const incident = await this.prisma.missionIncident.create({
       data: {
         sessionId: input.sessionId,
@@ -495,15 +500,10 @@ export class MissionTrackingService {
       },
     });
 
-    // Sauvegarder les photos si présentes
     if (input.photos && input.photos.length > 0) {
       for (let i = 0; i < input.photos.length; i++) {
         const { cheminFichier, tailleOctets, typeContenu } =
-          await this.saveIncidentPhoto(
-            input.photos[i],
-            incident.id,
-            i,
-          );
+          await this.saveIncidentPhoto(input.photos[i], incident.id, i);
 
         await this.prisma.missionIncidentMedia.create({
           data: {
@@ -517,7 +517,6 @@ export class MissionTrackingService {
       }
     }
 
-    // Si la déviation GPS est le type → passer la mission en PROBLEME_TRAJET
     if (input.typeIncident === 'DÉVIATION_GPS') {
       await this.prisma.mission.update({
         where: { id: session.missionId },
@@ -525,14 +524,12 @@ export class MissionTrackingService {
       });
     }
 
-    // Notifier l'agent
     await this.notifyAgentDeviation(session.missionId);
 
     this.logger.log(
       `🚨 Incident ${input.typeIncident} signalé pour session ${input.sessionId}`,
     );
 
-    // Retourner l'incident avec ses médias
     const incidentWithMedias = await this.prisma.missionIncident.findUnique({
       where: { id: incident.id },
       include: { medias: true },
@@ -541,24 +538,18 @@ export class MissionTrackingService {
     return incidentWithMedias as any as MissionIncidentResult;
   }
 
-  /**
-   * NOUVEAU : Résout un incident (réservé à l'agent)
-   */
   async resolveIncident(
     incidentId: string,
     resolutionNotes: string,
     userId: number,
   ): Promise<MissionIncidentResult> {
-    // Récupérer l'incident
     const incident = await this.prisma.missionIncident.findUnique({
       where: { id: incidentId },
       include: {
         session: {
           include: {
             mission: {
-              include: {
-                agent: { include: { user: true } },
-              },
+              include: { agent: { include: { user: true } } },
             },
           },
         },
@@ -569,7 +560,6 @@ export class MissionTrackingService {
       throw new NotFoundException(`Incident ${incidentId} introuvable.`);
     }
 
-    // Seul l'agent responsable peut résoudre
     if (incident.session.mission.agent.user.id !== userId) {
       throw new ForbiddenException(
         'Seul l agent responsable peut résoudre un incident.',
@@ -590,7 +580,6 @@ export class MissionTrackingService {
       include: { medias: true },
     });
 
-    // Vérifier s'il reste des incidents non résolus sur la session
     const incidentsNonResolus = await this.prisma.missionIncident.count({
       where: {
         sessionId: incident.sessionId,
@@ -598,7 +587,6 @@ export class MissionTrackingService {
       },
     });
 
-    // Si plus aucun incident non résolu → repasser EN_COURS
     if (incidentsNonResolus === 0) {
       await this.prisma.mission.update({
         where: { id: incident.session.missionId },
@@ -612,25 +600,17 @@ export class MissionTrackingService {
     return updated as any as MissionIncidentResult;
   }
 
-  /**
-   * NOUVEAU : Liste tous les incidents d'une session avec leurs photos
-   */
   async getIncidents(
     sessionId: string,
     userId: number,
   ): Promise<MissionIncidentResult[]> {
-    // Récupérer la session pour vérifier l'accès
     const session = await this.prisma.missionSession.findUnique({
       where: { id: sessionId },
       include: {
         mission: {
-          include: {
-            agent: { include: { user: true } },
-          },
+          include: { agent: { include: { user: true } } },
         },
-        reservation: {
-          include: { adherent: true },
-        },
+        reservation: { include: { adherent: true } },
       },
     });
 
@@ -638,7 +618,6 @@ export class MissionTrackingService {
       throw new NotFoundException(`Session ${sessionId} introuvable.`);
     }
 
-    // Accès : agent de la mission ou convoyeur
     const isAgent = session.mission.agent.user.id === userId;
     const isAdherent = session.reservation.adherent.userId === userId;
 
@@ -656,12 +635,9 @@ export class MissionTrackingService {
   }
 
   // ============================================================
-  // MÉTHODES PRIVÉES - LOGIQUE GPS
+  // MÉTHODES PRIVÉES
   // ============================================================
 
-  /**
-   * MODIFIÉ : compare au dernier point + vérifie la vitesse impliquée
-   */
   private async checkGpsDeviation(
     sessionId: string,
     newPosition: GpsPoint,
@@ -672,9 +648,7 @@ export class MissionTrackingService {
       orderBy: { timestamp: 'desc' },
     });
 
-    if (!lastTracking) {
-      return false;
-    }
+    if (!lastTracking) return false;
 
     const distance = this.calculateDistance(
       newPosition.latitude,
@@ -688,7 +662,6 @@ export class MissionTrackingService {
         lastTracking.timestamp.getTime()) /
       1000;
 
-    // Éviter division par zéro
     if (elapsedSeconds <= 0) return false;
 
     const impliedSpeedKmh = (distance / 1000) / (elapsedSeconds / 3600);
@@ -703,9 +676,6 @@ export class MissionTrackingService {
     return false;
   }
 
-  /**
-   * Calcule la distance entre 2 points GPS (formule Haversine)
-   */
   private calculateDistance(
     lat1: number,
     lng1: number,
@@ -714,23 +684,15 @@ export class MissionTrackingService {
   ): number {
     const R = 6371000;
     const toRad = (deg: number) => (deg * Math.PI) / 180;
-
     const dLat = toRad(lat2 - lat1);
     const dLng = toRad(lng2 - lng1);
-
     const a =
       Math.sin(dLat / 2) ** 2 +
-      Math.cos(toRad(lat1)) *
-        Math.cos(toRad(lat2)) *
-        Math.sin(dLng / 2) ** 2;
-
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
 
-  /**
-   * Notifie l'agent d'une déviation GPS ou d'un incident
-   */
   private async notifyAgentDeviation(missionId: string): Promise<void> {
     try {
       const mission = await this.prisma.mission.findUnique({
@@ -742,16 +704,12 @@ export class MissionTrackingService {
         this.logger.warn(
           `⚠️ ALERTE: Problème détecté pour mission ${missionId} — Agent: ${mission.agent.user.email}`,
         );
-        // À intégrer : AlertesService ou EmailService
       }
     } catch (err: any) {
       this.logger.error(`Erreur notification agent: ${err.message}`);
     }
   }
 
-  /**
-   * Sauvegarde une photo d'incident sur disque
-   */
   private async saveIncidentPhoto(
     base64Data: string,
     incidentId: string,
@@ -794,9 +752,6 @@ export class MissionTrackingService {
     return extensions[mimeType] || 'jpg';
   }
 
-  /**
-   * MODIFIÉ : accès élargi — pas de filtre sur statut réservation
-   */
   private async assertMissionAccess(
     missionId: string,
     userId: number,
@@ -805,10 +760,7 @@ export class MissionTrackingService {
       where: { id: missionId },
       include: {
         agent: { include: { user: true } },
-        reservations: {
-          // MODIFIÉ : plus de filtre statut
-          include: { adherent: true },
-        },
+        reservations: { include: { adherent: true } },
       },
     });
 
@@ -820,8 +772,6 @@ export class MissionTrackingService {
     const isAdherent = mission.reservations.some(
       (r) => r.adherent.userId === userId,
     );
-
-    // Vérifier aussi si admin
     const isAdmin = await this.prisma.admin.findUnique({ where: { userId } });
 
     if (!isAgent && !isAdherent && !isAdmin) {
@@ -829,7 +779,6 @@ export class MissionTrackingService {
     }
   }
 
-  // calculateCenterPoint gardé pour compatibilité si utilisé ailleurs
   private calculateCenterPoint(trackings: any[]): GpsPoint {
     const avgLat =
       trackings.reduce((sum: number, t: any) => sum + t.latitude, 0) /

@@ -8,12 +8,18 @@ type ActiveMissionMap {
   isDeviated: Boolean!
   lastGpsAt: DateTime!
   latitude: Float!
-  latitudeArrivee: Float!
+  latitudeArrivee: Float
+  latitudeDepart: Float
   longitude: Float!
-  longitudeArrivee: Float!
+  longitudeArrivee: Float
+  longitudeDepart: Float
   missionId: ID!
+  noteAgent: Float
+  scoreLogistique: Float
+  scorePredictedLabel: String
   sessionId: ID!
   status: String!
+  statut: String!
   vehicleName: String!
 }
 
