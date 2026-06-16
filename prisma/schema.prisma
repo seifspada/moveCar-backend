@@ -735,6 +735,12 @@ model Mission {
   statut      StatutMission @default(EN_ATTENTE)
   commentaire String?       @db.Text
 
+  // ── Score ML ──────────────────────────
+  scoreLogistique      Float?
+  scorePredictedLabel  String?   @db.VarChar(50)
+  scoreCalculatedAt    DateTime?
+  noteAgent            Float?
+
   dateCreation     DateTime @default(now())
   dateModification DateTime @updatedAt
 

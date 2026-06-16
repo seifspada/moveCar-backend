@@ -31,6 +31,7 @@ import { PreTripInspectionModule } from './Module/pretrip-inspection/pretrip-ins
 import { NotificationModule } from './Module/notification/notification.module';
 import { MissionSessionModule } from './Module/mission-session/mission-session.module';
 import { MissionTrackingModule } from './Module/mission-tracking/mission-tracking.module';
+import { ScoresMlModule } from './Module/scores-ml/scores-ml.module';
 
 // ✅ Initialisation Firebase Admin (une seule fois au démarrage)
 if (!admin.apps.length) {
@@ -87,6 +88,7 @@ if (!admin.apps.length) {
     NotificationModule,
     MissionSessionModule,
     MissionTrackingModule,
+    ScoresMlModule,
   ],
   controllers: [AppController],
   providers: [AppService],

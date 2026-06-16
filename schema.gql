@@ -90,6 +90,12 @@ type AlerteGeographique {
   villeNom: String
 }
 
+type ArrivalCheckResult {
+  distanceMetres: Int!
+  isArrived: Boolean!
+  villeArrivee: String!
+}
+
 enum BoiteVitesse {
   AUTOMATIQUE
   MANUELLE
@@ -216,7 +222,7 @@ input EndMissionSessionInput {
   kilometrageFin: Int
   latitudeFin: Float!
   longitudeFin: Float!
-  photosPost: [MediaUploadInput!]
+  photosPost: [MediaUploadInput!]!
   sessionId: String!
 }
 
@@ -241,6 +247,15 @@ type FichierDocumentEntity {
   dateCreation: DateTime!
   dateModification: DateTime!
   id: Int!
+}
+
+"""Types d incidents possibles durant une mission"""
+enum IncidentType {
+  ANOMALIE_CARBURANT
+  ARRET_PROLONGE
+  DETOUR_INJUSTIFIE
+  DEVIATION_GPS
+  VITESSE_EXCESSIVE
 }
 
 """Filtres pour lister les inspections"""
@@ -304,13 +319,41 @@ type MissionEntity {
   disponibilite: DisponibiliteEntity
   documents: [DocumentEntity!]!
   id: ID!
+  noteAgent: Float
   notifications: [NotificationEntity!]!
   partenaire: PartenaireMissionEntity
+  scoreCalculatedAt: DateTime
+  scoreLogistique: Float
+  scorePredictedLabel: String
   statut: StatutMission!
   vehicule: VehiculeMissionEntity!
 }
 
+type MissionIncidentMediaEntity {
+  cheminFichier: Float!
+  dateCreation: DateTime!
+  id: ID!
+  incidentId: ID!
+  ordre: Int!
+  tailleOctets: Float!
+}
+
+type MissionIncidentResult {
+  dateCreation: DateTime!
+  dateResolution: DateTime
+  description: String!
+  id: ID!
+  latitude: Float!
+  longitude: Float!
+  medias: [MissionIncidentMediaEntity!]!
+  resolutionNotes: String
+  resolvedBy: String
+  sessionId: ID!
+  typeIncident: IncidentType!
+}
+
 type MissionSession {
+  adherent: AdherentSimpleEntity
   commentaireFin: String
   consentAccepted: Boolean!
   dateConsentement: DateTime!
@@ -416,6 +459,7 @@ type Mutation {
 
   """Modifier le rayon d'une alerte"""
   modifierRayonAlerte(id: String!, rayon: Int!): AlerteGeographique!
+  noterMissionConvoyeur(missionId: String!, note: Int!): Boolean!
 
   """Refuser une demande d'annulation (agent)"""
   refuseCancellationRequest(id: String!, motifRefus: String!): ReservationMissionEntity!
@@ -423,8 +467,18 @@ type Mutation {
   """Refuser une réservation avec motif (agent)"""
   refuseReservation(id: String!, motifRefus: String!): ReservationMissionEntity!
 
+  """
+  Signale un incident en route (panne, déviation…) avec photos optionnelles (max 3)
+  """
+  reportMissionIncident(input: ReportIncidentInput!): MissionIncidentResult!
+
   """Demander une annulation après 24h (adhérent)"""
   requestCancellation(id: String!, motifAnnulation: String!): ReservationMissionEntity!
+
+  """
+  Résout un incident signalé — réservé à l'agent responsable de la mission
+  """
+  resolveMissionIncident(input: ResolveIncidentInput!): MissionIncidentResult!
 
   """Démarre une inspection pré-mission (Adhérent uniquement)"""
   startInspection(input: StartInspectionInput!): PreTripInspection!
@@ -600,11 +654,18 @@ type Query {
   """Récupérer toutes les réservations (admin/agent)"""
   allReservations: [ReservationMissionEntity!]!
 
+  """
+  Vérifie si le convoyeur est arrivé à destination (seuil 500m) — appelé par Flutter toutes les 30s
+  """
+  checkMissionArrival(latitude: Float!, longitude: Float!, sessionId: ID!): ArrivalCheckResult!
+
   """Vérifier les nouvelles missions correspondant à mes alertes"""
   checkNouvellesMissions: [AlerteGeographique!]!
   contratTarification(demandeId: Int!): ContratTarificationType!
 
-  """Recupere les missions en cours avec leur derniere position GPS"""
+  """
+  Carte temps réel — dernière position GPS de chaque mission EN_COURS. Admin voit tout, Agent voit les siennes.
+  """
   getActiveMissionsMap: [ActiveMissionMap!]!
 
   """Récupérer une alerte par son ID"""
@@ -623,13 +684,15 @@ type Query {
   """Récupère le résumé final d'une mission complétée"""
   getMissionCompletion(missionId: ID!): MissionCompletion
 
+  """
+  Liste tous les incidents d'une session avec leurs photos — accessible au convoyeur et à l'agent
+  """
+  getMissionIncidents(sessionId: ID!): [MissionIncidentResult!]!
+
   """Récupère la session d'une réservation"""
-  getMissionSession(reservationId: String!): MissionSession
+  getMissionSessionPhotos(etape: EtapeSession, sessionId: String!): MissionSession
 
-  """Récupère les photos d'une session (pré ou post mission)"""
-  getMissionSessionPhotos(etape: EtapeSession, sessionId: String!): [MissionSessionMedia!]!
-
-  """Récupère l'historique GPS d'une mission"""
+  """Récupère l'historique GPS complet d'une mission"""
   getMissionTrackingHistory(missionId: ID!): [MissionTracking!]!
 
   """Toutes les missions sans filtre (admin/agent)"""
@@ -640,6 +703,9 @@ type Query {
 
   """Récupérer toutes mes alertes avec les tokens FCM"""
   getMyAlertesByUserWithTokens: [AlerteGeographique!]!
+
+  """Récupère les sessions de l'adhérent, filtrables par statut"""
+  getMyMissionSessions(statut: String): [MissionSession!]!
 
   """Récupérer l'historique de mes notifications"""
   getMyNotificationsHistory(limit: Int = 50): [NotificationAlerte!]!
@@ -680,29 +746,37 @@ type Query {
   validatePreMissionPhotos(sessionId: String!): PhotoValidationResult!
 }
 
+input ReportIncidentInput {
+  description: String!
+  latitude: Float!
+  longitude: Float!
+
+  """Photos en base64, max 3"""
+  photos: [String!]
+  sessionId: ID!
+  typeIncident: IncidentType!
+}
+
 type ReservationMissionEntity {
   adherent: AdherentSimpleEntity
-  adherentId: Int!
   annulePar: String
   commentaireAdherent: String
   commentaireAgent: String
   dateAcceptationAgent: DateTime
   dateAnnulation: DateTime
-  dateArrivee: DateTime!
+  dateArrivee: DateTime
   dateConfirmationAdherent: DateTime
   dateCreation: DateTime!
   dateDepart: DateTime!
-  dateModification: DateTime!
-  dateRefus: DateTime
-  dateValidation: DateTime
   distanceKm: Float!
   dureeEstimee: Int
   fraisPeage: Float!
-  heureArrivee: String!
+  heureArrivee: String
   heureDepart: String!
   id: ID!
   mission: MissionEntity
   missionId: String!
+  missionSession: MissionSession
   montantTotal: Float!
   motifAnnulation: String
   motifRefus: String
@@ -716,6 +790,11 @@ type ReservationResponse {
   message: String!
   reservation: ReservationMissionEntity
   success: Boolean!
+}
+
+input ResolveIncidentInput {
+  incidentId: ID!
+  resolutionNotes: String!
 }
 
 input SearchByPositionInput {
@@ -759,7 +838,7 @@ input StartMissionSessionInput {
   kilometrageDebut: Int
   latitudeDebut: Float!
   longitudeDebut: Float!
-  photosPre: [MediaUploadInput!]
+  photosPre: [MediaUploadInput!]!
   reservationId: String!
 }
 

@@ -9,6 +9,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ScoresMlService } from '../scores-ml/scores-ml.service';
 import {
   EndMissionSessionInput,
   StartMissionSessionInput,
@@ -34,7 +35,10 @@ export class MissionSessionService {
     },
   };
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly scoresMlService: ScoresMlService,
+  ) {
     if (!fs.existsSync(this.uploadsDir)) {
       fs.mkdirSync(this.uploadsDir, { recursive: true });
     }

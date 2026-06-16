@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
-import { HttpModule } from '@nestjs/axios';  // ✅ Importer
+import { HttpModule } from '@nestjs/axios';
 import { MissionsController } from './missions.controller';
 import { MissionsService } from './missions.service';
 import { RouteCalculatorModule } from '../route-calculator/route-calculator.module';
@@ -10,20 +10,23 @@ import { GeoService } from '../geo/geo.service';
 import { GeoModule } from '../geo/geo.module';
 import { PrismaModule } from '../../prisma/prisma.module';
 import { DemandePartenaireModule } from '../demande-partenaire/demande-partenaire.module';
+import { ScoresMlModule } from '../scores-ml/scores-ml.module';
+
 @Module({
   imports: [
     PrismaModule,
+    ScoresMlModule,
     AlertesModule,
-    GeoModule ,
+    GeoModule,
     RouteCalculatorModule,
     DemandePartenaireModule,
-    HttpModule,  // ✅ Ajouter HttpModule
+    HttpModule,
     MulterModule.register({
       dest: './uploads/documents',
     }),
   ],
   controllers: [MissionsController],
-  providers: [MissionsService,MissionsResolver],
+  providers: [MissionsService, MissionsResolver],
   exports: [MissionsService],
 })
 export class MissionsModule {}

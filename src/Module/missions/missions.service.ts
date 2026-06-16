@@ -1,4 +1,4 @@
-// missions.service.ts
+﻿// missions.service.ts
 
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { RouteCalculatorService } from '../route-calculator/route-calculator.service';
@@ -15,6 +15,7 @@ import { SearchByPositionInput, SearchByTrajetInput } from './types/mission-sear
 import { GeoService } from '../geo/geo.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DemandePartenaireService } from '../demande-partenaire/demande-partenaire.service';
+import { ScoresMlService } from '../scores-ml/scores-ml.service';
 
 
 export type MissionWithRelations = Mission & {
@@ -54,6 +55,7 @@ export class MissionsService {
     private readonly geoService: GeoService,
     private readonly httpService: HttpService,
     private readonly demandePartenaireService: DemandePartenaireService,
+    private readonly scoresMlService: ScoresMlService,
   ) {}
 
 
@@ -968,4 +970,30 @@ async toggleFavori(adherentId: number, missionId: string): Promise<{ isFavori: b
   });
   return { isFavori: true };
 }
+
+  // ─────────────────────────────────────────────────────────────
+  //  NOTATION AGENT (ML Trigger)
+  // ─────────────────────────────────────────────────────────────
+
+  async noterMissionConvoyeur(missionId: string, note: number): Promise<void> {
+    const mission = await this.prisma.mission.findUnique({
+      where: { id: missionId },
+    });
+
+    if (!mission) {
+      throw new HttpException('Mission non trouvee', HttpStatus.NOT_FOUND);
+    }
+
+    // 1. Sauvegarder la note dans la base de donnees
+    // cast "as any" car client Prisma verrouille sur Windows (serveur actif)
+    await (this.prisma.mission as any).update({
+      where: { id: missionId },
+      data: { noteAgent: note },
+    });
+
+    // 2. Declencher le calcul ML (fire-and-forget)
+    this.scoresMlService.calculateScoreAndSave(missionId).catch((err) => {
+      console.error('Echec calcul ML apres notation: ' + err.message);
+    });
+  }
 }

@@ -1,4 +1,4 @@
-import { ObjectType, Field, ID, Float, Int, registerEnumType } from '@nestjs/graphql';
+﻿import { ObjectType, Field, ID, Float, Int, registerEnumType } from '@nestjs/graphql';
 import { TypeVehicule, TypeCarburant, BoiteVitesse, TypeLieu, StatutMission } from '@prisma/client';
 
 registerEnumType(StatutMission, { name: 'StatutMission' });
@@ -248,4 +248,17 @@ export class MissionEntity {
 
    @Field(() => ContratTarificationEntity, { nullable: true })
   contrat?: ContratTarificationEntity;
+
+  // ── Champs Machine Learning ──
+  @Field(() => Float, { nullable: true })
+  scoreLogistique?: number;
+
+  @Field({ nullable: true })
+  scorePredictedLabel?: string;
+
+  @Field({ nullable: true })
+  scoreCalculatedAt?: Date;
+
+  @Field(() => Float, { nullable: true })
+  noteAgent?: number;
 }

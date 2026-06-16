@@ -280,6 +280,19 @@ export class MissionsResolver {
     return isFavori;
   }
 
+  /**
+   * ✅ NOUVEAU — Noter le convoyeur et déclencher le ML
+   */
+  @Mutation(() => Boolean)
+  async noterMissionConvoyeur(
+    @Args('missionId', { type: () => String }) missionId: string,
+    @Args('note', { type: () => Number }) note: number,
+  ): Promise<boolean> {
+    if (note < 1 || note > 5) throw new BadRequestException('La note doit être entre 1 et 5');
+    await this.missionsService.noterMissionConvoyeur(missionId, note);
+    return true;
+  }
+
   // ─────────────────────────────────────────────────────────────
   //  RESOLVE FIELDS
   // ─────────────────────────────────────────────────────────────

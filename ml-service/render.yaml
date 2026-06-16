@@ -1,0 +1,22 @@
+# render.yaml — ML Service (FastAPI)
+services:
+  - type: web
+    name: movecar-ml-service
+    runtime: python
+    plan: starter          # Changer en "standard" pour la production
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: INTERNAL_ML_API_KEY
+        sync: false         # Mettre la vraie valeur dans le dashboard Render
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: MODEL_BUCKET
+        value: ml-models
+      - key: MODEL_FILE
+        value: movecar_model.pkl
+      - key: MODEL_PATH
+        value: /opt/render/project/src/movecar_model.pkl
