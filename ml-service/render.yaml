@@ -21,4 +21,4 @@ services:
       - key: MODEL_FILE
         value: movecar_model.pkl
       - key: MODEL_PATH
-        value: /opt/render/project/src/movecar_model.pkl
+        value: /opt/render/project/src/ml-service/movecar_model.pkl
