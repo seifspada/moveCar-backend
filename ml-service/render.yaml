@@ -3,13 +3,15 @@ services:
   - type: web
     name: movecar-ml-service
     runtime: python
-    plan: starter          # Changer en "standard" pour la production
+    plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: INTERNAL_ML_API_KEY
-        sync: false         # Mettre la vraie valeur dans le dashboard Render
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_KEY
