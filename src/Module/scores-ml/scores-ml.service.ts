@@ -43,98 +43,87 @@ export class ScoresMlService {
     }
   }
 
-  private async collectFeatures(missionId: string): Promise<any> {
-    const mission = await this.prisma.mission.findUnique({
-      where: { id: missionId },
-      include: {
-        vehicule: true,
-        adresseDepart: true,
-        sessions: {
-          where: { statut: 'TERMINEE' },
-          orderBy: { dateFin: 'desc' },
-          take: 1,
-        },
-        reservations: {
-          include: {
-            adherent: true,
+ private async collectFeatures(missionId: string): Promise<any> {
+  const mission = await this.prisma.mission.findUnique({
+    where: { id: missionId },
+    include: {
+      vehicule: true,
+      adresseDepart: true,
+      agent: {
+        include: {
+          user: {
+            include: { adherent: true },
           },
         },
       },
-    });
+      calculs: true,
+      disponibilite: true,
+      sessions: {
+        where: { statut: 'TERMINEE' },
+        orderBy: { dateFin: 'desc' },
+        take: 1,
+      },
+    },
+  });
 
-    if (!mission || !mission.reservations || mission.reservations.length === 0) {
-      throw new Error("Mission ou réservation introuvable");
-    }
-
-    const reservation = mission.reservations[0];
-    const adherent = reservation.adherent;
-    const vehicule = mission.vehicule;
-    const adresseDepart = mission.adresseDepart;
-
-    // --- Calcul de l'âge du convoyeur ---
-    let age = 30; // Valeur par défaut
-    if (adherent.dateNaissance) {
-      const ageDiffMs = Date.now() - new Date(adherent.dateNaissance).getTime();
-      const ageDate = new Date(ageDiffMs);
-      age = Math.abs(ageDate.getUTCFullYear() - 1970);
-    }
-
-    // --- Distance KM ---
-    const distanceKm = reservation.distanceKm ? Number(reservation.distanceKm) : 10;
-
-    // --- Météo (API Open-Meteo) ---
-    const weatherCond = await this.fetchWeatherConditions(
-      adresseDepart.latitude,
-      adresseDepart.longitude,
-    );
-
-    // --- Variables temporelles ---
-    const dateDepart = new Date(reservation.dateDepart);
-    const dayOfWeek = dateDepart.getDay(); // 0 (Dimanche) - 6 (Samedi). Le modèle attend 0=Lun -> 6=Dim
-    const mappedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1; 
-
-    const orderHour = reservation.heureDepart ? parseInt(reservation.heureDepart.split(':')[0], 10) : 9;
-
-    // --- Note Agent ---
-    const noteAgent = mission.noteAgent || 5.0; // 5.0 par défaut si non noté
-
-    // --- Délai de livraison (Minutes) ---
-    let deliveryDelayMin = 0;
-    const session = mission.sessions && mission.sessions.length > 0 ? mission.sessions[0] : null;
-    
-    if (session && session.dateFin && reservation.dateArrivee) {
-      // Calcul de la différence en minutes entre l'arrivée réelle et prévue
-      const arriveeReelle = new Date(session.dateFin).getTime();
-      
-      // On combine dateArrivee et heureArrivee si possible
-      let datePrevue = new Date(reservation.dateArrivee).getTime();
-      if (reservation.heureArrivee) {
-        const [hh, mm] = reservation.heureArrivee.split(':').map(Number);
-        const prevueDate = new Date(reservation.dateArrivee);
-        prevueDate.setUTCHours(hh, mm, 0, 0);
-        datePrevue = prevueDate.getTime();
-      }
-
-      const diffMs = arriveeReelle - datePrevue;
-      if (diffMs > 0) {
-        deliveryDelayMin = Math.floor(diffMs / 60000);
-      }
-    }
-
-    return {
-      delivery_person_age: age,
-      vehicle_condition: 2, // 2 = Excellent (par défaut comme demandé)
-      delivery_person_ratings: noteAgent,
-      distance_km: distanceKm,
-      pickup_delay_min: 0, // 0 = Lancement à l'heure au démarrage
-      delivery_delay_min: deliveryDelayMin,
-      order_hour: orderHour,
-      order_day: mappedDay,
-      weather_conditions: weatherCond,
-      type_of_order: this.mapVehicleType(vehicule.typeVehicule),
-      city: this.mapCityType(adresseDepart.villeNom),
-    };
+  if (!mission) {
+    throw new Error(`Mission ${missionId} introuvable`);
   }
+
+  // --- Âge du convoyeur (via agent → user → adherent) ---
+  let age = 35;
+  const adherent = mission.agent?.user?.adherent;
+  if (adherent?.dateNaissance) {
+    const diff = Date.now() - new Date(adherent.dateNaissance).getTime();
+    age = Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+  }
+
+  // --- Distance KM (depuis calculs) ---
+  const distanceKm = mission.calculs
+    ? Number(mission.calculs.distanceKm)
+    : 100;
+
+  // --- Météo ---
+  const weatherCond = await this.fetchWeatherConditions(
+    Number(mission.adresseDepart.latitude),
+    Number(mission.adresseDepart.longitude),
+  );
+
+  // --- Variables temporelles (depuis disponibilite) ---
+  const dateDepart = mission.disponibilite?.dateDebut ?? new Date();
+  const dayOfWeek = dateDepart.getDay();
+  const mappedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const orderHour = dateDepart.getHours();
+
+  // --- Note agent (saisie manuellement) ---
+  const noteAgent = mission.noteAgent ?? 4.0;
+
+  // --- Délai de livraison ---
+  let deliveryDelayMin = 0;
+  const session = mission.sessions?.[0];
+  if (session?.dateFin && mission.disponibilite?.dateFin) {
+    const arriveeReelle = new Date(session.dateFin).getTime();
+    const arriveePrevu  = new Date(mission.disponibilite.dateFin).getTime();
+    const diffMs = arriveeReelle - arriveePrevu;
+    if (diffMs > 0) {
+      deliveryDelayMin = Math.floor(diffMs / 60000);
+    }
+  }
+
+  return {
+    delivery_person_age:     age,
+    vehicle_condition:       2,
+    delivery_person_ratings: noteAgent,
+    distance_km:             distanceKm,
+    pickup_delay_min:        0,
+    delivery_delay_min:      deliveryDelayMin,
+    order_hour:              orderHour,
+    order_day:               mappedDay,
+    weather_conditions:      weatherCond,
+    type_of_order:           this.mapVehicleType(mission.vehicule.typeVehicule),
+    city:                    this.mapCityType(mission.adresseDepart.villeNom),
+  };
+}
 
   private async fetchWeatherConditions(lat: number, lng: number): Promise<string> {
     try {
