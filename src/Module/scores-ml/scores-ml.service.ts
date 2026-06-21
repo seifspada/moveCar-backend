@@ -6,6 +6,9 @@ import { firstValueFrom } from 'rxjs';
 @Injectable()
 export class ScoresMlService {
   private readonly logger = new Logger(ScoresMlService.name);
+  private readonly arrivalCityRadiusMeters = Number(
+    process.env.ARRIVAL_CITY_RADIUS_METERS || 10000,
+  );
 
   constructor(
     private readonly httpService: HttpService,
@@ -16,7 +19,26 @@ export class ScoresMlService {
     try {
       this.logger.log(`Debut du calcul du score ML pour la mission ${missionId}`);
 
-      const features = await this.collectFeatures(missionId, noteAgent);
+      const { features, arrivalCheck } = await this.collectFeatures(missionId, noteAgent);
+
+      if (!arrivalCheck.isInArrivalCity) {
+        this.logger.warn(
+          `Mission ${missionId} terminee hors ville arrivee: distance=${Math.round(
+            arrivalCheck.distanceMeters,
+          )}m, rayon=${this.arrivalCityRadiusMeters}m`,
+        );
+
+        return this.prisma.mission.update({
+          where: { id: missionId },
+          data: {
+            ...(noteAgent !== undefined ? { noteAgent } : {}),
+            scoreLogistique: 0,
+            scorePredictedLabel: 'Hors zone arrivee',
+            scoreCalculatedAt: new Date(),
+          },
+        });
+      }
+
       this.logger.log(`Appel du modele ML avec le payload: ${JSON.stringify(features)}`);
 
       const mlResponse = await this.callMlService(features);
@@ -53,6 +75,7 @@ export class ScoresMlService {
       include: {
         vehicule: true,
         adresseDepart: true,
+        adresseArrivee: true,
         calculs: true,
         disponibilite: true,
         sessions: {
@@ -96,6 +119,14 @@ export class ScoresMlService {
     }
 
     const distanceKm = Number(reservation.distanceKm ?? mission.calculs?.distanceKm ?? 100);
+    const arrivalCheck = this.checkArrivalCity(session, mission.adresseArrivee);
+
+    if (!arrivalCheck.isInArrivalCity) {
+      return {
+        features: null,
+        arrivalCheck,
+      };
+    }
 
     const weatherCond = await this.fetchWeatherConditions(
       Number(mission.adresseDepart.latitude),
@@ -125,18 +156,72 @@ export class ScoresMlService {
     );
 
     return {
-      delivery_person_age: age,
-      vehicle_condition: 2,
-      delivery_person_ratings: rating,
-      distance_km: distanceKm,
-      pickup_delay_min: pickupDelayMin,
-      delivery_delay_min: deliveryDelayMin,
-      order_hour: plannedDeparture.getHours(),
-      order_day: mappedDay,
-      weather_conditions: weatherCond,
-      mission_type: this.mapMissionType(mission.vehicule.typeVehicule),
-      route_type: this.mapRouteType(distanceKm),
+      features: {
+        delivery_person_age: age,
+        vehicle_condition: 2,
+        delivery_person_ratings: rating,
+        distance_km: distanceKm,
+        pickup_delay_min: pickupDelayMin,
+        delivery_delay_min: deliveryDelayMin,
+        order_hour: plannedDeparture.getHours(),
+        order_day: mappedDay,
+        weather_conditions: weatherCond,
+        mission_type: this.mapMissionType(mission.vehicule.typeVehicule),
+        route_type: this.mapRouteType(distanceKm),
+      },
+      arrivalCheck,
     };
+  }
+
+  private checkArrivalCity(session: any, adresseArrivee: any): {
+    isInArrivalCity: boolean;
+    distanceMeters: number;
+  } {
+    const latitudeFin = Number(session.latitudeFin);
+    const longitudeFin = Number(session.longitudeFin);
+    const latitudeArrivee = Number(adresseArrivee?.latitude);
+    const longitudeArrivee = Number(adresseArrivee?.longitude);
+
+    if (
+      !Number.isFinite(latitudeFin) ||
+      !Number.isFinite(longitudeFin) ||
+      !Number.isFinite(latitudeArrivee) ||
+      !Number.isFinite(longitudeArrivee)
+    ) {
+      return { isInArrivalCity: false, distanceMeters: Number.POSITIVE_INFINITY };
+    }
+
+    const distanceMeters = this.calculateDistanceMeters(
+      latitudeFin,
+      longitudeFin,
+      latitudeArrivee,
+      longitudeArrivee,
+    );
+
+    return {
+      isInArrivalCity: distanceMeters <= this.arrivalCityRadiusMeters,
+      distanceMeters,
+    };
+  }
+
+  private calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const earthRadiusMeters = 6371000;
+    const dLat = this.toRad(lat2 - lat1);
+    const dLon = this.toRad(lon2 - lon1);
+
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(this.toRad(lat1)) *
+        Math.cos(this.toRad(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return earthRadiusMeters * c;
+  }
+
+  private toRad(value: number): number {
+    return (value * Math.PI) / 180;
   }
 
   private buildDateTime(date?: Date | null, time?: string | null): Date | null {
