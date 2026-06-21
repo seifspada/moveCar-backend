@@ -975,7 +975,46 @@ async toggleFavori(adherentId: number, missionId: string): Promise<{ isFavori: b
   //  NOTATION AGENT (ML Trigger)
   // ─────────────────────────────────────────────────────────────
 
-  async noterMissionConvoyeur(missionId: string, note: number): Promise<void> {
+  async noterMissionConvoyeur(missionId: string, note: number, agentId?: number): Promise<any> {
+    if (!Number.isFinite(note) || note < 1 || note > 5) {
+      throw new HttpException('La note doit etre entre 1 et 5', HttpStatus.BAD_REQUEST);
+    }
+
+    const mission = await this.prisma.mission.findUnique({
+      where: { id: missionId },
+      include: {
+        sessions: {
+          where: { statut: 'TERMINEE' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!mission) {
+      throw new HttpException('Mission non trouvee', HttpStatus.NOT_FOUND);
+    }
+
+    if (agentId != null && mission.agentId !== agentId) {
+      throw new HttpException('Cette mission ne appartient pas a cet agent', HttpStatus.FORBIDDEN);
+    }
+
+    if (mission.statut !== StatutMission.TERMINEE || mission.sessions.length === 0) {
+      throw new HttpException(
+        'La mission doit etre terminee avant de calculer le score',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    await (this.prisma.mission as any).update({
+      where: { id: missionId },
+      data: { noteAgent: note },
+    });
+
+    console.log(`Declenchement du calcul ML pour la mission ${missionId}...`);
+    return this.scoresMlService.calculateScoreAndSave(missionId);
+  }
+
+  private async noterMissionConvoyeurLegacy(missionId: string, note: number): Promise<void> {
     const mission = await this.prisma.mission.findUnique({
       where: { id: missionId },
     });

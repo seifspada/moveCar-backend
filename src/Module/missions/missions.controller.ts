@@ -80,6 +80,27 @@ async creerMission(
     };
   }
 
+  @Patch(':id/note-agent')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('agent')
+  async noterMissionConvoyeur(
+    @Param('id') missionId: string,
+    @Body('note') note: number,
+    @Req() req: FastifyRequest & { user: any },
+  ) {
+    const mission = await this.missionsService.noterMissionConvoyeur(
+      missionId,
+      Number(note),
+      req.user.agentId,
+    );
+
+    return {
+      success: true,
+      message: 'Note agent et score ML enregistres avec succes',
+      data: mission,
+    };
+  }
+
   @Patch(':id/statut')
   @UsePipes(new ValidationPipe())
   async mettreAJourStatut(

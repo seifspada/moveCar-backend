@@ -7,6 +7,7 @@ import {
   Parent,
   Args,
   Int,
+  Float,
   Context,
 } from '@nestjs/graphql';
 import {
@@ -25,6 +26,9 @@ import {
 import { MissionEntity } from './types/mission-entity.type';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GqlAuthGuard } from '../../auth/guards/gql-auth.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { Roles } from '../../auth/decorators/roles.decorator';
+import { Role } from '../../auth/enum/role.enum';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 import { CreateMissionDto } from './dto/create-mission.dto';
 import { CreateMissionInput } from './inputs/create-mission.input';
@@ -284,12 +288,15 @@ export class MissionsResolver {
    * ✅ NOUVEAU — Noter le convoyeur et déclencher le ML
    */
   @Mutation(() => Boolean)
+  @UseGuards(GqlAuthGuard, RolesGuard)
+  @Roles(Role.AGENT)
   async noterMissionConvoyeur(
     @Args('missionId', { type: () => String }) missionId: string,
-    @Args('note', { type: () => Number }) note: number,
+    @Args('note', { type: () => Float }) note: number,
+    @CurrentUser() user: any,
   ): Promise<boolean> {
     if (note < 1 || note > 5) throw new BadRequestException('La note doit être entre 1 et 5');
-    await this.missionsService.noterMissionConvoyeur(missionId, note);
+    await this.missionsService.noterMissionConvoyeur(missionId, note, user?.agentId);
     return true;
   }
 
