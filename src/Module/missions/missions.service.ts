@@ -1,4 +1,4 @@
-﻿// missions.service.ts
+// missions.service.ts
 
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { RouteCalculatorService } from '../route-calculator/route-calculator.service';
@@ -991,9 +991,12 @@ async toggleFavori(adherentId: number, missionId: string): Promise<{ isFavori: b
       data: { noteAgent: note },
     });
 
-    // 2. Declencher le calcul ML (fire-and-forget)
-    this.scoresMlService.calculateScoreAndSave(missionId).catch((err) => {
-      console.error('Echec calcul ML apres notation: ' + err.message);
-    });
+    // 2. Declencher le calcul ML (fire-and-forget mais avec meilleurs logs)
+    console.log(`🚀 Déclenchement du calcul ML pour la mission ${missionId}...`);
+    this.scoresMlService.calculateScoreAndSave(missionId)
+      .then(() => console.log(`✅ Calcul ML terminé avec succès pour la mission ${missionId}`))
+      .catch((err) => {
+        console.error('❌ Echec calcul ML apres notation: ' + err.message);
+      });
   }
 }

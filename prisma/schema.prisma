@@ -920,34 +920,26 @@ model ReservationMission {
   id String @id @default(cuid())
 
   missionId String
-  mission   Mission @relation(fields: [missionId], references: [id], onDelete: Restrict)
+  mission   Mission @relation(fields: [missionId], references: [id], onDelete: Cascade) // ✅ Restrict → Cascade
 
   adherentId Int
-  adherent   Adherent @relation(fields: [adherentId], references: [id], onDelete: Restrict)
+  adherent   Adherent @relation(fields: [adherentId], references: [id], onDelete: Restrict) // ← laisser Restrict
 
   statut            StatutReservation @default(EN_ATTENTE)
   numeroReservation String            @unique @db.VarChar(50)
-
   dateDepart  DateTime
   heureDepart String   @db.VarChar(5)
-
-  // ✅ FIX — nullable pour cohérence avec entity backend et Flutter
   dateArrivee  DateTime?
   heureArrivee String?  @db.VarChar(5)
-
   dureeEstimee Int?
-
   commentaireAdherent String? @db.Text
   commentaireAgent    String? @db.Text
-
   dateValidation DateTime?
   dateRefus      DateTime?
   motifRefus     String?   @db.Text
-
   montantTotal Decimal @db.Decimal(10, 2)
   fraisPeage   Decimal @db.Decimal(10, 2)
   distanceKm   Decimal @db.Decimal(10, 2)
-
   dateCreation             DateTime           @default(now())
   dateModification         DateTime           @updatedAt
   dateAcceptationAgent     DateTime?
@@ -956,7 +948,6 @@ model ReservationMission {
   motifAnnulation          String?            @db.Text
   annulePar                String?
   statutPrecedent          StatutReservation?
-
   preTripInspection PreTripInspection?
   missionSession    MissionSession?
 

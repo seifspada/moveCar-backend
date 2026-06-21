@@ -22,7 +22,7 @@ export class ScoresMlService {
       // 1. Collecter toutes les features depuis la base de données
       const features = await this.collectFeatures(missionId);
 
-      // 2. Appeler le microservice ML FastAPI
+      this.logger.log(`Appel du modèle ML avec le payload: ${JSON.stringify(features)}`);
       const mlResponse = await this.callMlService(features);
 
       // 3. Sauvegarder le score dans la base de données
@@ -36,10 +36,11 @@ export class ScoresMlService {
       });
 
       this.logger.log(
-        `Score ML sauvegardé pour mission ${missionId} : ${mlResponse.ml_score} (${mlResponse.predicted_label})`,
+        `✅ Score ML sauvegardé pour mission ${missionId} : ${mlResponse.ml_score} (${mlResponse.predicted_label}) | Final: ${mlResponse.score_final}`
       );
     } catch (error) {
-      this.logger.error(`Erreur lors du calcul du score ML pour la mission ${missionId}:`, error);
+      this.logger.error(`❌ Erreur lors du calcul du score ML pour la mission ${missionId}:`, error);
+      throw error; // Propagate error so the caller knows it failed
     }
   }
 
@@ -120,8 +121,8 @@ export class ScoresMlService {
     order_hour:              orderHour,
     order_day:               mappedDay,
     weather_conditions:      weatherCond,
-    type_of_order:           this.mapVehicleType(mission.vehicule.typeVehicule),
-    city:                    this.mapCityType(mission.adresseDepart.villeNom),
+    mission_type:            this.mapMissionType(mission.vehicule.typeVehicule),
+    route_type:              this.mapRouteType(distanceKm),
   };
 }
 
@@ -162,53 +163,50 @@ export class ScoresMlService {
   }
 
   /**
-   * Mappe le TypeVehicule vers Type_of_order du modèle
-   * Options attendues: "Meal", "Snack", "Drinks", "Buffet" 
-   * (Nous adaptons selon la taille du véhicule)
+   * Mappe le TypeVehicule vers mission_type du modèle
+   * Options attendues: "Véhicule Neuf", "Véhicule d'Occasion", "Véhicule en Panne (Assistance)", "Lot de véhicules / Flotte"
    */
-  private mapVehicleType(typeVehicule: string): string {
+  private mapMissionType(typeVehicule: string): string {
     // Si la valeur n'existe pas ou correspond à un véhicule léger
     const light = ['CITADINE', 'COMPACTE', 'BERLINE', 'CABRIOLET'];
     const medium = ['MONOSPACE', 'LUXE', 'VU_3M3', 'VU_6M3'];
     const heavy = ['VU_9M3', 'VU_12M3', 'VU_15M3', 'VU_20M3', 'VU_25M3', 'VU_30M3'];
 
-    if (light.includes(typeVehicule)) return "Snack";
-    if (medium.includes(typeVehicule)) return "Meal";
-    if (heavy.includes(typeVehicule)) return "Buffet";
+    if (light.includes(typeVehicule)) return "Véhicule d'Occasion";
+    if (medium.includes(typeVehicule)) return "Véhicule Neuf";
+    if (heavy.includes(typeVehicule)) return "Lot de véhicules / Flotte";
 
-    return "Meal"; // Par défaut "neuf"
+    return "Véhicule Neuf"; // Par défaut
   }
 
   /**
-   * Mappe la ville vers City du modèle
-   * Options: "Metropolitian", "Urban", "Semi-Urban"
+   * Mappe la distance vers route_type du modèle
+   * Options: "Autoroute / Inter-urbain", "Zone Urbaine / Ville", "Zone Rurale / Difficile"
    */
-  private mapCityType(villeNom: string): string {
-    const metropoles = ['paris', 'lyon', 'marseille', 'toulouse', 'bordeaux', 'lille'];
-    if (!villeNom) return "Urban";
-    
-    const villeLower = villeNom.toLowerCase();
-    
-    if (metropoles.some(m => villeLower.includes(m))) {
-      return "Metropolitian";
-    }
-    
-    return "Urban";
+  private mapRouteType(distanceKm: number): string {
+    if (distanceKm < 30) return "Zone Urbaine / Ville";
+    if (distanceKm > 100) return "Autoroute / Inter-urbain";
+    return "Zone Rurale / Difficile";
   }
 
-  private async callMlService(payload: any): Promise<{ml_score: number, predicted_label: string}> {
+  private async callMlService(payload: any): Promise<any> {
     const mlUrl = process.env.ML_SERVICE_URL || 'http://localhost:8000';
     const mlApiKey = process.env.INTERNAL_ML_API_KEY || 'change_me_in_env';
 
-    const response = await firstValueFrom(
-      this.httpService.post(`${mlUrl}/predict`, payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': mlApiKey,
-        },
-      }),
-    );
-
-    return response.data;
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(`${mlUrl}/predict`, payload, {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': mlApiKey,
+          },
+        }),
+      );
+      this.logger.log(`Réponse ML reçue avec succès: ${JSON.stringify(response.data)}`);
+      return response.data;
+    } catch (error: any) {
+      this.logger.error(`Erreur d'appel API ML (${mlUrl}): ${error.response?.data ? JSON.stringify(error.response.data) : error.message}`);
+      throw error;
+    }
   }
 }
