@@ -1005,13 +1005,8 @@ async toggleFavori(adherentId: number, missionId: string): Promise<{ isFavori: b
       );
     }
 
-    await (this.prisma.mission as any).update({
-      where: { id: missionId },
-      data: { noteAgent: note },
-    });
-
     console.log(`Declenchement du calcul ML pour la mission ${missionId}...`);
-    return this.scoresMlService.calculateScoreAndSave(missionId);
+    return this.scoresMlService.calculateScoreAndSave(missionId, note);
   }
 
   private async noterMissionConvoyeurLegacy(missionId: string, note: number): Promise<void> {
@@ -1023,16 +1018,9 @@ async toggleFavori(adherentId: number, missionId: string): Promise<{ isFavori: b
       throw new HttpException('Mission non trouvee', HttpStatus.NOT_FOUND);
     }
 
-    // 1. Sauvegarder la note dans la base de donnees
-    // cast "as any" car client Prisma verrouille sur Windows (serveur actif)
-    await (this.prisma.mission as any).update({
-      where: { id: missionId },
-      data: { noteAgent: note },
-    });
-
-    // 2. Declencher le calcul ML (fire-and-forget mais avec meilleurs logs)
+    // Declencher le calcul ML (fire-and-forget mais avec meilleurs logs)
     console.log(`🚀 Déclenchement du calcul ML pour la mission ${missionId}...`);
-    this.scoresMlService.calculateScoreAndSave(missionId)
+    this.scoresMlService.calculateScoreAndSave(missionId, note)
       .then(() => console.log(`✅ Calcul ML terminé avec succès pour la mission ${missionId}`))
       .catch((err) => {
         console.error('❌ Echec calcul ML apres notation: ' + err.message);

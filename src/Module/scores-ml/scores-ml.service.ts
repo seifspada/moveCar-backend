@@ -12,11 +12,11 @@ export class ScoresMlService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async calculateScoreAndSave(missionId: string): Promise<any> {
+  async calculateScoreAndSave(missionId: string, noteAgent?: number): Promise<any> {
     try {
       this.logger.log(`Debut du calcul du score ML pour la mission ${missionId}`);
 
-      const features = await this.collectFeatures(missionId);
+      const features = await this.collectFeatures(missionId, noteAgent);
       this.logger.log(`Appel du modele ML avec le payload: ${JSON.stringify(features)}`);
 
       const mlResponse = await this.callMlService(features);
@@ -29,6 +29,7 @@ export class ScoresMlService {
       const updatedMission = await this.prisma.mission.update({
         where: { id: missionId },
         data: {
+          ...(noteAgent !== undefined ? { noteAgent } : {}),
           scoreLogistique: scoreToSave,
           scorePredictedLabel: mlResponse.predicted_label,
           scoreCalculatedAt: new Date(),
@@ -46,7 +47,7 @@ export class ScoresMlService {
     }
   }
 
-  private async collectFeatures(missionId: string): Promise<any> {
+  private async collectFeatures(missionId: string, noteAgent?: number): Promise<any> {
     const mission = await this.prisma.mission.findUnique({
       where: { id: missionId },
       include: {
@@ -83,7 +84,8 @@ export class ScoresMlService {
       throw new Error(`Reservation introuvable pour la session ${session.id}`);
     }
 
-    if (mission.noteAgent == null) {
+    const rating = noteAgent ?? mission.noteAgent;
+    if (rating == null) {
       throw new Error(`noteAgent manquante pour la mission ${missionId}`);
     }
 
@@ -125,7 +127,7 @@ export class ScoresMlService {
     return {
       delivery_person_age: age,
       vehicle_condition: 2,
-      delivery_person_ratings: mission.noteAgent,
+      delivery_person_ratings: rating,
       distance_km: distanceKm,
       pickup_delay_min: pickupDelayMin,
       delivery_delay_min: deliveryDelayMin,
