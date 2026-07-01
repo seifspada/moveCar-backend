@@ -24,10 +24,11 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
         raise HTTPException(401, detail="Clé API invalide")
     return True
 
-# ── Compat pickle : le modèle a été exporté depuis Colab où la classe ─────
-# vivait dans __main__. On la réenregistre ici sous ce même nom pour que
-# joblib.load() puisse la retrouver, peu importe comment le service démarre.
+# ── Compat pickle : le modèle a été exporté depuis Colab où la classe ET ──
+# la fonction analyze_driving_score vivaient dans __main__. On les
+# réenregistre ici pour que joblib.load() les retrouve.
 sys.modules["__main__"].RealisticDrivingScoreModel = RealisticDrivingScoreModel
+sys.modules["__main__"].analyze_driving_score = analyze_driving_score
 
 # ── Chargement modèle ────────────────────────────────────────────────────
 MODEL_PATH = os.getenv("MODEL_PATH", "convoyeur_scorer_securite.pkl")
@@ -40,6 +41,7 @@ try:
 except Exception as e:
     print(f"⚠️ Modèle sécurité non chargé : {e}")
 
+# ── reste du fichier inchangé ──
 # ── Schémas ───────────────────────────────────────────────────────────────
 class ScoreRequest(BaseModel):
     gps_text: str
