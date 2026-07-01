@@ -25,7 +25,7 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
     return True
 
 # ── Chargement modèle ────────────────────────────────────────────────────
-MODEL_PATH = os.getenv("MODEL_PATH", "securite_model.pkl")
+MODEL_PATH = os.getenv("MODEL_PATH", "convoyeur_scorer_securite.pkl")
 bundle = {}
 gps_behavior_model = None
 try:
