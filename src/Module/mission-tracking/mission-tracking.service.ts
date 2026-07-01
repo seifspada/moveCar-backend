@@ -17,6 +17,7 @@ import {
 } from './entities/mission-tracking.entity';
 import * as fs from 'fs';
 import * as path from 'path';
+import { SecuriteScoreService } from '../securite-score/securite-score.service';
 
 // ============================================
 // CONSTANTES & CONFIGURATION
@@ -38,7 +39,10 @@ export class MissionTrackingService {
   private readonly logger = new Logger(MissionTrackingService.name);
   private readonly uploadsDir = path.join(process.cwd(), 'uploads', 'mission-incidents');
 
-  constructor(private readonly prisma: PrismaService) {
+constructor(
+  private readonly prisma: PrismaService,
+  private readonly securiteScoreService: SecuriteScoreService,
+) {
     if (!fs.existsSync(this.uploadsDir)) {
       fs.mkdirSync(this.uploadsDir, { recursive: true });
     }
@@ -157,221 +161,227 @@ export class MissionTrackingService {
    * Récupère toutes les missions EN_COURS + TERMINEE récentes (< 24h) pour la carte agent
    * Les missions TERMINEE sont incluses pour permettre l'évaluation par l'agent
    */
-  async getActiveMissionsMap(userId: number): Promise<ActiveMissionMap[]> {
-    const admin = await this.prisma.admin.findUnique({ where: { userId } });
-
-    // Missions terminées depuis moins de 24h restent visibles sur la carte
-    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-    let missionFilter: any = {
-      statut: { in: ['EN_COURS', 'PROBLEME_TRAJET', 'TERMINEE'] },
-    };
-
-    const sessionStatutFilter = {
-      OR: [
-        { statut: 'EN_COURS' as any },
-        {
-          statut: 'TERMINEE' as any,
-          dateFin: { gte: since24h },
-        },
-      ],
-    };
-
-    if (!admin) {
-      const agent = await this.prisma.agent.findUnique({
-        where: { userId },
-        select: { id: true },
-      });
-
-      if (!agent) {
-        throw new ForbiddenException('Accès refusé.');
-      }
-
-      missionFilter = {
-        statut: { in: ['EN_COURS', 'PROBLEME_TRAJET', 'TERMINEE'] },
-        agentId: agent.id,
-      };
-    }
-
-    const sessions = await this.prisma.missionSession.findMany({
-      where: {
-        ...sessionStatutFilter,
-        mission: missionFilter,
+ async getActiveMissionsMap(userId: number): Promise<ActiveMissionMap[]> {
+  const admin = await this.prisma.admin.findUnique({ where: { userId } });
+  // Missions terminées depuis moins de 24h restent visibles sur la carte
+  const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  let missionFilter: any = {
+    statut: { in: ['EN_COURS', 'PROBLEME_TRAJET', 'TERMINEE'] },
+  };
+  const sessionStatutFilter = {
+    OR: [
+      { statut: 'EN_COURS' as any },
+      {
+        statut: 'TERMINEE' as any,
+        dateFin: { gte: since24h },
       },
-      include: {
-        // gpsHistory est bien une relation sur MissionSession
-        gpsHistory: {
-          orderBy: { timestamp: 'desc' },
-          take: 1,
-        },
-        // noteAgent / scoreLogistique / scorePredictedLabel sont sur Mission directement
-        mission: {
-          include: {
-            vehicule: true,
-            adresseArrivee: true,
-            adresseDepart: true,
-          },
-        },
-        reservation: {
-          include: {
-            adherent: true,
-          },
-        },
-      },
-      orderBy: { dateDebut: 'desc' },
+    ],
+  };
+  if (!admin) {
+    const agent = await this.prisma.agent.findUnique({
+      where: { userId },
+      select: { id: true },
     });
-
-    // Dédupliquer : garder une seule session par missionId (la plus récente)
-    const seenMissions = new Set<string>();
-
-    return sessions
-      .filter((session) => {
-        if (seenMissions.has(session.missionId)) return false;
-        seenMissions.add(session.missionId);
-        return true;
-      })
-      .map((session) => {
-        const lastGps = session.gpsHistory[0];
-
-        return {
-          missionId: session.missionId,
-          sessionId: session.id,
-          vehicleName: `${session.mission.vehicule.marqueModele} - ${session.mission.vehicule.immatriculation}`,
-          convoyeurName: `${session.reservation.adherent.prenom} ${session.reservation.adherent.nom}`,
-          // status pour compatibilité ancien code, statut pour logique frontend
-          status: session.mission.statut,
-          statut: session.mission.statut,
-          latitude: lastGps?.latitude ?? session.latitudeDebut,
-          longitude: lastGps?.longitude ?? session.longitudeDebut,
-          latitudeDepart: session.mission.adresseDepart?.latitude ?? null,
-          longitudeDepart: session.mission.adresseDepart?.longitude ?? null,
-          latitudeArrivee: session.mission.adresseArrivee?.latitude ?? null,
-          longitudeArrivee: session.mission.adresseArrivee?.longitude ?? null,
-          accuracy: lastGps?.accuracy ?? null,
-          lastGpsAt: lastGps?.timestamp ?? session.dateDebut,
-          isDeviated: lastGps?.isDeviated ?? false,
-          // Ces 3 champs sont sur Mission directement (pas sur MissionCompletion)
-          noteAgent: session.mission.noteAgent ?? null,
-          scoreLogistique: session.mission.scoreLogistique ?? null,
-          scorePredictedLabel: session.mission.scorePredictedLabel ?? null,
-        };
-      });
+    if (!agent) {
+      throw new ForbiddenException('Accès refusé.');
+    }
+    missionFilter = {
+      statut: { in: ['EN_COURS', 'PROBLEME_TRAJET', 'TERMINEE'] },
+      agentId: agent.id,
+    };
   }
+  const sessions = await this.prisma.missionSession.findMany({
+    where: {
+      ...sessionStatutFilter,
+      mission: missionFilter,
+    },
+    include: {
+      // gpsHistory est bien une relation sur MissionSession
+      gpsHistory: {
+        orderBy: { timestamp: 'desc' },
+        take: 1,
+      },
+      // noteAgent / scoreLogistique / scorePredictedLabel / scoreSecurite sont sur Mission directement
+      mission: {
+        include: {
+          vehicule: true,
+          adresseArrivee: true,
+          adresseDepart: true,
+        },
+      },
+      reservation: {
+        include: {
+          adherent: true,
+        },
+      },
+    },
+    orderBy: { dateDebut: 'desc' },
+  });
+  // Dédupliquer : garder une seule session par missionId (la plus récente)
+  const seenMissions = new Set<string>();
+  return sessions
+    .filter((session) => {
+      if (seenMissions.has(session.missionId)) return false;
+      seenMissions.add(session.missionId);
+      return true;
+    })
+    .map((session) => {
+      const lastGps = session.gpsHistory[0];
+      return {
+        missionId: session.missionId,
+        sessionId: session.id,
+        vehicleName: `${session.mission.vehicule.marqueModele} - ${session.mission.vehicule.immatriculation}`,
+        convoyeurName: `${session.reservation.adherent.prenom} ${session.reservation.adherent.nom}`,
+        // status pour compatibilité ancien code, statut pour logique frontend
+        status: session.mission.statut,
+        statut: session.mission.statut,
+        latitude: lastGps?.latitude ?? session.latitudeDebut,
+        longitude: lastGps?.longitude ?? session.longitudeDebut,
+        latitudeDepart: session.mission.adresseDepart?.latitude ?? null,
+        longitudeDepart: session.mission.adresseDepart?.longitude ?? null,
+        latitudeArrivee: session.mission.adresseArrivee?.latitude ?? null,
+        longitudeArrivee: session.mission.adresseArrivee?.longitude ?? null,
+        accuracy: lastGps?.accuracy ?? null,
+        lastGpsAt: lastGps?.timestamp ?? session.dateDebut,
+        isDeviated: lastGps?.isDeviated ?? false,
+        // Ces champs sont sur Mission directement (pas sur MissionCompletion)
+        noteAgent: session.mission.noteAgent ?? null,
+        scoreLogistique: session.mission.scoreLogistique ?? null,
+        scorePredictedLabel: session.mission.scorePredictedLabel ?? null,
+        // ── NOUVEAU : score sécurité (conduite) ──
+        scoreSecurite: session.mission.scoreSecurite ?? null,
+        labelSecurite: session.mission.labelSecurite ?? null,
+      };
+    });
+}
 
   /**
    * Termine la mission et valide le trajet
    */
-  async completeMission(
-    input: CompleteMissionInput,
-    userId: number,
-  ): Promise<MissionCompletion> {
-    await this.assertMissionAccess(input.missionId, userId);
+ async completeMission(
+  input: CompleteMissionInput,
+  userId: number,
+): Promise<MissionCompletion> {
+  await this.assertMissionAccess(input.missionId, userId);
 
-    const mission = await this.prisma.mission.findUnique({
-      where: { id: input.missionId },
-      include: { reservations: true },
-    });
+  const mission = await this.prisma.mission.findUnique({
+    where: { id: input.missionId },
+    include: { reservations: true },
+  });
 
-    if (!mission) {
-      throw new NotFoundException(`Mission ${input.missionId} introuvable.`);
-    }
+  if (!mission) {
+    throw new NotFoundException(`Mission ${input.missionId} introuvable.`);
+  }
 
-    if (mission.statut !== 'EN_COURS') {
-      throw new BadRequestException(
-        `La mission doit être EN_COURS pour être terminée.`,
+  if (mission.statut !== 'EN_COURS') {
+    throw new BadRequestException(
+      `La mission doit être EN_COURS pour être terminée.`,
+    );
+  }
+
+  const trackings = await this.prisma.missionGPSTrack.findMany({
+    where: { session: { missionId: input.missionId } },
+    orderBy: { timestamp: 'asc' },
+  });
+
+  const validTrackings = trackings.filter((t) => !t.isDeviated);
+  const invalidTrackings = trackings.filter((t) => t.isDeviated);
+  const totalLocations = trackings.length;
+
+  let invalidationReason: string | null = null;
+  let maxDeviation = 0;
+  let dureeTrajet = 0;
+
+  if (totalLocations < MIN_LOCATIONS_FOR_COMPLETION) {
+    invalidationReason = `Nombre insuffisant de positions GPS (${totalLocations} < ${MIN_LOCATIONS_FOR_COMPLETION})`;
+  }
+
+  if (trackings.length > 0) {
+    for (let i = 1; i < trackings.length; i++) {
+      const dist = this.calculateDistance(
+        trackings[i - 1].latitude,
+        trackings[i - 1].longitude,
+        trackings[i].latitude,
+        trackings[i].longitude,
       );
+      if (dist > maxDeviation) maxDeviation = dist;
     }
 
-    const trackings = await this.prisma.missionGPSTrack.findMany({
-      where: { session: { missionId: input.missionId } },
-      orderBy: { timestamp: 'asc' },
-    });
-
-    const validTrackings = trackings.filter((t) => !t.isDeviated);
-    const invalidTrackings = trackings.filter((t) => t.isDeviated);
-    const totalLocations = trackings.length;
-
-    let invalidationReason: string | null = null;
-    let maxDeviation = 0;
-    let dureeTrajet = 0;
-
-    if (totalLocations < MIN_LOCATIONS_FOR_COMPLETION) {
-      invalidationReason = `Nombre insuffisant de positions GPS (${totalLocations} < ${MIN_LOCATIONS_FOR_COMPLETION})`;
-    }
-
-    if (trackings.length > 0) {
-      for (let i = 1; i < trackings.length; i++) {
-        const dist = this.calculateDistance(
-          trackings[i - 1].latitude,
-          trackings[i - 1].longitude,
-          trackings[i].latitude,
-          trackings[i].longitude,
-        );
-        if (dist > maxDeviation) maxDeviation = dist;
-      }
-
-      dureeTrajet = Math.round(
-        (trackings[trackings.length - 1].timestamp.getTime() -
-          trackings[0].timestamp.getTime()) /
-          1000,
-      );
-
-      if (
-        invalidTrackings.length > 0 &&
-        invalidTrackings.length / totalLocations > 0.3
-      ) {
-        invalidationReason = `Trop de positions GPS incohérentes (${invalidTrackings.length} / ${totalLocations})`;
-      }
-    }
-
-    const completion = await this.prisma.missionCompletion.upsert({
-      where: { missionId: input.missionId },
-      create: {
-        missionId: input.missionId,
-        latitudeFin: input.latitudeFin,
-        longitudeFin: input.longitudeFin,
-        totalLocations,
-        validLocations: validTrackings.length,
-        invalidLocations: invalidTrackings.length,
-        maxDeviation,
-        dureeTrajet,
-        completed: !invalidationReason,
-        dateCompletion: new Date(),
-        invalidationReason,
-      },
-      update: {
-        latitudeFin: input.latitudeFin,
-        longitudeFin: input.longitudeFin,
-        totalLocations,
-        validLocations: validTrackings.length,
-        invalidLocations: invalidTrackings.length,
-        maxDeviation,
-        dureeTrajet,
-        completed: !invalidationReason,
-        dateCompletion: new Date(),
-        invalidationReason,
-      },
-    });
-
-    const newStatut = completion.completed ? 'TERMINEE' : 'PROBLEME_TRAJET';
-
-    await this.prisma.$transaction([
-      this.prisma.mission.update({
-        where: { id: input.missionId },
-        data: { statut: newStatut as any },
-      }),
-      this.prisma.missionSession.updateMany({
-        where: { missionId: input.missionId, statut: 'EN_COURS' },
-        data: { statut: 'TERMINEE' },
-      }),
-    ]);
-
-    this.logger.log(
-      `✅ Mission ${input.missionId} terminée. Statut: ${newStatut}. Points GPS: ${totalLocations}`,
+    dureeTrajet = Math.round(
+      (trackings[trackings.length - 1].timestamp.getTime() -
+        trackings[0].timestamp.getTime()) /
+        1000,
     );
 
-    return completion;
+    if (
+      invalidTrackings.length > 0 &&
+      invalidTrackings.length / totalLocations > 0.3
+    ) {
+      invalidationReason = `Trop de positions GPS incohérentes (${invalidTrackings.length} / ${totalLocations})`;
+    }
   }
+
+  const completion = await this.prisma.missionCompletion.upsert({
+    where: { missionId: input.missionId },
+    create: {
+      missionId: input.missionId,
+      latitudeFin: input.latitudeFin,
+      longitudeFin: input.longitudeFin,
+      totalLocations,
+      validLocations: validTrackings.length,
+      invalidLocations: invalidTrackings.length,
+      maxDeviation,
+      dureeTrajet,
+      completed: !invalidationReason,
+      dateCompletion: new Date(),
+      invalidationReason,
+    },
+    update: {
+      latitudeFin: input.latitudeFin,
+      longitudeFin: input.longitudeFin,
+      totalLocations,
+      validLocations: validTrackings.length,
+      invalidLocations: invalidTrackings.length,
+      maxDeviation,
+      dureeTrajet,
+      completed: !invalidationReason,
+      dateCompletion: new Date(),
+      invalidationReason,
+    },
+  });
+
+  const newStatut = completion.completed ? 'TERMINEE' : 'PROBLEME_TRAJET';
+
+  await this.prisma.$transaction([
+    this.prisma.mission.update({
+      where: { id: input.missionId },
+      data: { statut: newStatut as any },
+    }),
+    this.prisma.missionSession.updateMany({
+      where: { missionId: input.missionId, statut: 'EN_COURS' },
+      data: { statut: 'TERMINEE' },
+    }),
+  ]);
+
+  this.logger.log(
+    `✅ Mission ${input.missionId} terminée. Statut: ${newStatut}. Points GPS: ${totalLocations}`,
+  );
+
+  // ── NOUVEAU : calcul du score sécurité, uniquement si le trajet est validé ──
+  // Lancé en fire-and-forget : ne doit jamais bloquer ni faire échouer
+  // la réponse de completeMission côté mobile.
+  if (completion.completed) {
+    this.securiteScoreService
+      .computeAndSave(input.missionId)
+      .catch((err) =>
+        this.logger.error(
+          `Échec calcul score sécurité pour mission ${input.missionId}: ${err.message}`,
+        ),
+      );
+  }
+
+  return completion;
+}
 
   /**
    * Récupère le résumé final d'une mission

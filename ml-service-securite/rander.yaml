@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: convoyeur-securite-ml-service
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: INTERNAL_SECURITE_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: MODEL_BUCKET
+        value: securite-models
+      - key: MODEL_FILE
+        value: securite_model.pkl
+      - key: MODEL_PATH
+        value: /opt/render/project/src/securite-ml-service/securite_model.pkl

@@ -735,11 +735,18 @@ model Mission {
   statut      StatutMission @default(EN_ATTENTE)
   commentaire String?       @db.Text
 
-  // ── Score ML ──────────────────────────
+  // ── Score ML logistique ──────────────────────────
   scoreLogistique      Float?
   scorePredictedLabel  String?   @db.VarChar(50)
   scoreCalculatedAt    DateTime?
   noteAgent            Float?
+
+  // ── Score ML sécurité (conduite) ──────────────────
+  scoreSecurite         Float?
+  labelSecurite          String?   @db.VarChar(50)
+  scoreSecuriteCalculatedAt DateTime?
+  weatherUtilise          String?   @db.VarChar(20)
+  detailsSecurite         Json?
 
   dateCreation     DateTime @default(now())
   dateModification DateTime @updatedAt
@@ -773,9 +780,9 @@ model Mission {
   calculs       CalculMission?
   documents     Document[]
   reservations  ReservationMission[]
-  completion    MissionCompletion?     // ✅ Résumé final
+  completion    MissionCompletion?
   sessions      MissionSession[]
-  favoris MissionFavori[]   // ✅ ajouter uniquement cette ligne
+  favoris MissionFavori[]
 
   @@index([agentId])
   @@index([partenaireId])
