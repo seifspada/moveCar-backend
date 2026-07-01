@@ -1,11 +1,11 @@
-# securite-ml-service/main.py
 import os
+import sys
 import joblib
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-from scorer import analyze_driving_score
+from scorer import analyze_driving_score, RealisticDrivingScoreModel
 
 app = FastAPI(title="Convoyeur Securite ML Service", version="1.0.0")
 
@@ -23,6 +23,11 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
     if INTERNAL_SECURITE_API_KEY and x_api_key != INTERNAL_SECURITE_API_KEY:
         raise HTTPException(401, detail="Clé API invalide")
     return True
+
+# ── Compat pickle : le modèle a été exporté depuis Colab où la classe ─────
+# vivait dans __main__. On la réenregistre ici sous ce même nom pour que
+# joblib.load() puisse la retrouver, peu importe comment le service démarre.
+sys.modules["__main__"].RealisticDrivingScoreModel = RealisticDrivingScoreModel
 
 # ── Chargement modèle ────────────────────────────────────────────────────
 MODEL_PATH = os.getenv("MODEL_PATH", "convoyeur_scorer_securite.pkl")
