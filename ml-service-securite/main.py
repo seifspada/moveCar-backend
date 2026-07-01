@@ -1,11 +1,12 @@
 import os
 import sys
 import joblib
+import scorer  # importe tout le module
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-from scorer import analyze_driving_score, RealisticDrivingScoreModel
+from scorer import analyze_driving_score
 
 app = FastAPI(title="Convoyeur Securite ML Service", version="1.0.0")
 
@@ -24,11 +25,15 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
         raise HTTPException(401, detail="Clé API invalide")
     return True
 
-# ── Compat pickle : le modèle a été exporté depuis Colab où la classe ET ──
-# la fonction analyze_driving_score vivaient dans __main__. On les
-# réenregistre ici pour que joblib.load() les retrouve.
-sys.modules["__main__"].RealisticDrivingScoreModel = RealisticDrivingScoreModel
-sys.modules["__main__"].analyze_driving_score = analyze_driving_score
+# ── Compat pickle : le modèle a été exporté depuis Colab où TOUT scorer.py ─
+# vivait dans __main__ (classes ET fonctions). On copie automatiquement
+# tout ce qui est défini dans le module scorer vers __main__, pour que
+# joblib.load() retrouve n'importe quelle référence sans qu'on ait à les
+# lister une par une.
+main_module = sys.modules["__main__"]
+for _name in dir(scorer):
+    if not _name.startswith("_"):
+        setattr(main_module, _name, getattr(scorer, _name))
 
 # ── Chargement modèle ────────────────────────────────────────────────────
 MODEL_PATH = os.getenv("MODEL_PATH", "convoyeur_scorer_securite.pkl")
@@ -41,6 +46,7 @@ try:
 except Exception as e:
     print(f"⚠️ Modèle sécurité non chargé : {e}")
 
+# ── reste du fichier inchangé ──
 # ── reste du fichier inchangé ──
 # ── Schémas ───────────────────────────────────────────────────────────────
 class ScoreRequest(BaseModel):
