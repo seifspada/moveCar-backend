@@ -79,10 +79,62 @@ class RealisticDrivingScoreModel:
             return 0.35
         return 0.60
 
-    # ⬇️ collez ici EXACTEMENT votre méthode .analyze(...)
-    # du fichier finalmodelsecurityconvoyeur.py (lignes 699-873)
+    def score_label(self, score):
+        if score >= 85:
+            return "Conduite excellente"
+        if score >= 70:
+            return "Conduite correcte"
+        if score >= 50:
+            return "Conduite a surveiller"
+        if score >= 25:
+            return "Conduite risquee"
+        return "Conduite dangereuse"
+
     def analyze(self, df_gps):
-        ...
+        if df_gps is None or df_gps.empty or len(df_gps) < 2:
+            return self.empty_result("Donnees GPS insuffisantes pour l'analyse.")
+
+        speeds = df_gps["current_speed"].astype(float).values
+        timestamps = df_gps["timestamp"].astype(float).values
+
+        average_speed = float(np.mean(speeds))
+        max_speed = float(np.max(speeds))
+
+        # ── Vitesse excessive ────────────────────────────────────────────
+        overspeed_mask = speeds > self.speed_limit
+        overspeed_count = int(np.sum(overspeed_mask))
+
+        speed_penalty_total = 0.0
+        for s in speeds[overspeed_mask]:
+            excess = s - self.speed_limit
+            speed_penalty_total += self.speed_penalty_rate(excess) * 10.0
+
+        # ── Accélérations / freinages brusques ──────────────────────────
+        speeds_ms = np.array([self.kmh_to_ms(s) for s in speeds])
+        dt = np.diff(timestamps)
+        dt[dt == 0] = 0.001  # évite division par zéro
+        acceleration = np.diff(speeds_ms) / dt
+
+        harsh_acceleration_count = int(np.sum(acceleration > self.harsh_acceleration_threshold))
+        harsh_braking_count = int(np.sum(acceleration < self.harsh_braking_threshold))
+
+        harsh_event_penalty = (harsh_acceleration_count * 4.0) + (harsh_braking_count * 5.0)
+
+        # ── Score final ──────────────────────────────────────────────────
+        score = 100.0 - speed_penalty_total - harsh_event_penalty
+        score = clamp(score, 0.0, 100.0)
+
+        return {
+            "score": round(score, 2),
+            "label": self.score_label(score),
+            "rule_behavior_label": self.score_label(score),
+            "average_speed": round(average_speed, 2),
+            "max_speed": round(max_speed, 2),
+            "overspeed_count": overspeed_count,
+            "harsh_acceleration_count": harsh_acceleration_count,
+            "harsh_braking_count": harsh_braking_count,
+            "speed_limit": self.speed_limit,
+        }
 
     def empty_result(self, message):
         return {"score": 0.0, "label": "Erreur", "error": message}
