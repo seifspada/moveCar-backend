@@ -1,11 +1,12 @@
-// src/securite-score/securite-score.module.ts
+// src/Module/securite-score/securite-score.module.ts
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { SecuriteScoreService } from './securite-score.service';
-import { PrismaModule } from '../../prisma/prisma.module';
+import { SecuriteScoreController } from './securite-score.controller';
 
 @Module({
-  imports: [HttpModule, PrismaModule],
+  imports: [HttpModule],
+  controllers: [SecuriteScoreController],
   providers: [SecuriteScoreService],
   exports: [SecuriteScoreService],
 })
