@@ -118,6 +118,7 @@ constructor(
         latitude: input.latitude,
         longitude: input.longitude,
         accuracy: input.accuracy ?? null,
+        speed: input.speed ?? null,
         timestamp: new Date(input.timestamp),
         isDeviated,
         distanceFromRoute: null,

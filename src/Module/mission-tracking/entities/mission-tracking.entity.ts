@@ -30,6 +30,9 @@ export class MissionTracking {
   @Field(() => Float, { nullable: true })
   accuracy?: number;
 
+  @Field(() => Float, { nullable: true })
+  speed?: number;
+
   @Field(() => Date)
   timestamp: Date;
 

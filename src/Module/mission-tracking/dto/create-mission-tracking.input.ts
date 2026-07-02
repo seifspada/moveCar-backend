@@ -14,6 +14,9 @@ export class UpdateLocationInput {
   @Field(() => Float, { nullable: true })
   accuracy?: number;
 
+  @Field(() => Float, { nullable: true })
+  speed?: number;
+
   @Field(() => Date)
   timestamp: Date; // timestamp client (quand la position a été prise)
 }
