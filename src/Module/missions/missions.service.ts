@@ -890,35 +890,107 @@ async searchMissionsByTrajet(
     longitude: number;
   }> {
     try {
-      const response = await firstValueFrom(
-        this.httpService.get(
-          `https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(nomVille)}&fields=code,nom,centre,population&limit=10`,
-        ),
-      );
+      // 1️⃣ Essayer d'abord l'API française (geo.api.gouv.fr)
+      console.log(`🔍 [Étape 1] Recherche de "${nomVille}" en France...`);
+      try {
+        const responsesFr = await firstValueFrom(
+          this.httpService.get(
+            `https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(nomVille)}&fields=code,nom,centre,population&limit=10`,
+          ),
+        );
 
-      if (response.data.length === 0) throw new Error(`Ville "${nomVille}" non trouvée`);
+        console.log(`✅ [FR] Réponse reçue:`, responsesFr.data?.length, `résultats`);
 
-      const villesTriees = response.data
-        .filter((v: any) => v.centre)
-        .sort((a: any, b: any) => (b.population || 0) - (a.population || 0));
+        if (responsesFr.data && responsesFr.data.length > 0) {
+          const villesTriees = responsesFr.data
+            .filter((v: any) => v.centre)
+            .sort((a: any, b: any) => (b.population || 0) - (a.population || 0));
 
-      if (villesTriees.length === 0) throw new Error(`Ville "${nomVille}" non trouvée`);
+          if (villesTriees.length > 0) {
+            const ville = villesTriees[0];
+            console.log(`✅ Ville trouvée en France: ${ville.nom}`);
+            return {
+              codeInsee: ville.code,
+              nom:       ville.nom,
+              latitude:  ville.centre.coordinates[1],
+              longitude: ville.centre.coordinates[0],
+            };
+          }
+        }
+      } catch (frError) {
+        console.warn(`⚠️ [FR] Erreur API France:`, frError instanceof Error ? frError.message : String(frError));
+      }
 
-      const ville = villesTriees[0];
+      // 2️⃣ Basculer sur Nominatim pour Tunisie et autres pays
+      console.log(`🌍 [Étape 2] Recherche avec Nominatim pour "${nomVille}"...`);
+      let responsesNominatim;
+      try {
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(nomVille)}&format=json&limit=10&addressdetails=1`;
+        console.log(`📍 URL Nominatim:`, url);
+        
+        responsesNominatim = await firstValueFrom(
+          this.httpService.get(url, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (ConvoyeurApp)',
+            },
+          }),
+        );
+
+        console.log(`✅ [NOMINATIM] Réponse reçue:`, responsesNominatim.data?.length, `résultats`);
+        if (responsesNominatim.data && responsesNominatim.data.length > 0) {
+          console.log(`[DEBUG] Premier résultat:`, JSON.stringify(responsesNominatim.data[0], null, 2));
+        }
+      } catch (nominatimError) {
+        console.error(`❌ [NOMINATIM] Erreur lors de la requête:`, nominatimError instanceof Error ? nominatimError.message : String(nominatimError));
+        throw new Error(`Erreur connexion Nominatim: ${nominatimError instanceof Error ? nominatimError.message : 'Erreur inconnue'}`);
+      }
+
+      if (!responsesNominatim?.data || responsesNominatim.data.length === 0) {
+        console.error(`❌ [NOMINATIM] Aucun résultat pour "${nomVille}"`);
+        throw new Error(`Ville "${nomVille}" non trouvée dans OpenStreetMap`);
+      }
+
+      // 3️⃣ Sélectionner la meilleure correspondance
+      console.log(`🔎 [Étape 3] Analyse des résultats...`);
+      let villeSelectionnee = responsesNominatim.data[0]; // Par défaut, le premier
+      
+      // Prioriser les villes (pas les pays, régions, etc.)
+      const villes = responsesNominatim.data.filter((v: any) => {
+        const type = v.type || '';
+        const isCity = type === 'town' || type === 'city' || type === 'village';
+        console.log(`  - ${v.name}: type="${type}" country="${v.address?.country}" isCity=${isCity}`);
+        return isCity;
+      });
+
+      if (villes.length > 0) {
+        villeSelectionnee = villes[0];
+        console.log(`✅ Ville sélectionnée (par type): ${villeSelectionnee.name}`);
+      } else {
+        console.log(`⚠️ Pas de ville trouvée par type, utilisation du premier résultat`);
+      }
+
+      // Valider les données essentielles
+      if (!villeSelectionnee.lat || !villeSelectionnee.lon) {
+        console.error(`❌ Coordonnées manquantes pour ${villeSelectionnee.name}`);
+        throw new Error(`Coordonnées GPS manquantes pour "${villeSelectionnee.name}"`);
+      }
+
+      console.log(`✅ Ville finale: ${villeSelectionnee.name} (${villeSelectionnee.address?.country}) @ ${villeSelectionnee.lat}, ${villeSelectionnee.lon}`);
       return {
-        codeInsee: ville.code,
-        nom:       ville.nom,
-        latitude:  ville.centre.coordinates[1],
-        longitude: ville.centre.coordinates[0],
+        codeInsee: villeSelectionnee.osm_id?.toString() || 'UNKNOWN',
+        nom:       villeSelectionnee.name,
+        latitude:  parseFloat(villeSelectionnee.lat),
+        longitude: parseFloat(villeSelectionnee.lon),
       };
-    } // ✅ Après
-catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  throw new HttpException(
-    `Impossible de récupérer les informations pour "${nomVille}": ${message}`,
-    HttpStatus.BAD_REQUEST,
-  );
-}
+
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`❌ [obtenirInfoVille] Erreur finale pour "${nomVille}":`, message);
+      throw new HttpException(
+        `Ville "${nomVille}" non trouvée. Pays supportés: France, Tunisie. Détail: ${message}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
   }
 
   private convertirEnNombre(valeur: any, nomChamp: string): number {
