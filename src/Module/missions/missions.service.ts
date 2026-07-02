@@ -901,7 +901,7 @@ async searchMissionsByTrajet(
 
         console.log(`✅ [FR] Réponse reçue:`, responsesFr.data?.length, `résultats`);
 
-        if (responsesFr.data && responsesFr.data.length > 0) {
+        if (responsesFr.data && Array.isArray(responsesFr.data) && responsesFr.data.length > 0) {
           const villesTriees = responsesFr.data
             .filter((v: any) => v.centre)
             .sort((a: any, b: any) => (b.population || 0) - (a.population || 0));
@@ -923,65 +923,35 @@ async searchMissionsByTrajet(
 
       // 2️⃣ Basculer sur Nominatim pour Tunisie et autres pays
       console.log(`🌍 [Étape 2] Recherche avec Nominatim pour "${nomVille}"...`);
-      let responsesNominatim;
-      try {
-        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(nomVille)}&format=json&limit=10&addressdetails=1`;
-        console.log(`📍 URL Nominatim:`, url);
-        
-        responsesNominatim = await firstValueFrom(
-          this.httpService.get(url, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (ConvoyeurApp)',
-            },
-          }),
-        );
-
-        console.log(`✅ [NOMINATIM] Réponse reçue:`, responsesNominatim.data?.length, `résultats`);
-        if (responsesNominatim.data && responsesNominatim.data.length > 0) {
-          console.log(`[DEBUG] Premier résultat:`, JSON.stringify(responsesNominatim.data[0], null, 2));
-        }
-      } catch (nominatimError) {
-        console.error(`❌ [NOMINATIM] Erreur lors de la requête:`, nominatimError instanceof Error ? nominatimError.message : String(nominatimError));
-        throw new Error(`Erreur connexion Nominatim: ${nominatimError instanceof Error ? nominatimError.message : 'Erreur inconnue'}`);
-      }
-
-      if (!responsesNominatim?.data || responsesNominatim.data.length === 0) {
-        console.error(`❌ [NOMINATIM] Aucun résultat pour "${nomVille}"`);
-        throw new Error(`Ville "${nomVille}" non trouvée dans OpenStreetMap`);
-      }
-
-      // 3️⃣ Sélectionner la meilleure correspondance
-      console.log(`🔎 [Étape 3] Analyse des résultats...`);
-      let villeSelectionnee = responsesNominatim.data[0]; // Par défaut, le premier
       
-      // Prioriser les villes (pas les pays, régions, etc.)
-      const villes = responsesNominatim.data.filter((v: any) => {
-        const type = v.type || '';
-        const isCity = type === 'town' || type === 'city' || type === 'village';
-        console.log(`  - ${v.name}: type="${type}" country="${v.address?.country}" isCity=${isCity}`);
-        return isCity;
-      });
-
-      if (villes.length > 0) {
-        villeSelectionnee = villes[0];
-        console.log(`✅ Ville sélectionnée (par type): ${villeSelectionnee.name}`);
-      } else {
-        console.log(`⚠️ Pas de ville trouvée par type, utilisation du premier résultat`);
+      // Essayer d'abord avec le nom simple
+      let villeTrouvee = await this.rechercherAvecNominatim(nomVille);
+      
+      // Si pas trouvée, essayer avec suffixes de pays
+      if (!villeTrouvee) {
+        console.log(`⚠️ [Nominatim] "${nomVille}" simple non trouvé, essai avec suffixes...`);
+        const suffixes = [
+          `${nomVille}, Tunisia`,
+          `${nomVille}, Tunisie`,
+          `${nomVille}, TN`,
+        ];
+        
+        for (const suffixedName of suffixes) {
+          console.log(`  📍 Tentative: "${suffixedName}"`);
+          villeTrouvee = await this.rechercherAvecNominatim(suffixedName);
+          if (villeTrouvee) {
+            console.log(`  ✅ Trouvée avec: "${suffixedName}"`);
+            break;
+          }
+        }
       }
 
-      // Valider les données essentielles
-      if (!villeSelectionnee.lat || !villeSelectionnee.lon) {
-        console.error(`❌ Coordonnées manquantes pour ${villeSelectionnee.name}`);
-        throw new Error(`Coordonnées GPS manquantes pour "${villeSelectionnee.name}"`);
+      if (!villeTrouvee) {
+        throw new Error(`Ville "${nomVille}" non trouvée en France ni en Tunisie`);
       }
 
-      console.log(`✅ Ville finale: ${villeSelectionnee.name} (${villeSelectionnee.address?.country}) @ ${villeSelectionnee.lat}, ${villeSelectionnee.lon}`);
-      return {
-        codeInsee: villeSelectionnee.osm_id?.toString() || 'UNKNOWN',
-        nom:       villeSelectionnee.name,
-        latitude:  parseFloat(villeSelectionnee.lat),
-        longitude: parseFloat(villeSelectionnee.lon),
-      };
+      console.log(`✅ Ville finale: ${villeTrouvee.nom} (${villeTrouvee.codeInsee}) @ ${villeTrouvee.latitude}, ${villeTrouvee.longitude}`);
+      return villeTrouvee;
 
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -990,6 +960,72 @@ async searchMissionsByTrajet(
         `Ville "${nomVille}" non trouvée. Pays supportés: France, Tunisie. Détail: ${message}`,
         HttpStatus.BAD_REQUEST,
       );
+    }
+  }
+
+  private async rechercherAvecNominatim(nomVille: string): Promise<{
+    codeInsee: string;
+    nom: string;
+    latitude: number;
+    longitude: number;
+  } | null> {
+    try {
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(nomVille)}&format=json&limit=10&addressdetails=1`;
+      console.log(`  📍 URL: ${url}`);
+      
+      const responsesNominatim = await firstValueFrom(
+        this.httpService.get(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (ConvoyeurApp/1.0)',
+          },
+          timeout: 5000,
+        }),
+      );
+
+      console.log(`  ✅ Réponse Nominatim: ${responsesNominatim.data?.length} résultats`);
+      
+      if (!responsesNominatim?.data || !Array.isArray(responsesNominatim.data) || responsesNominatim.data.length === 0) {
+        console.log(`  ⚠️ Aucun résultat Nominatim pour "${nomVille}"`);
+        return null;
+      }
+
+      // Afficher les résultats
+      responsesNominatim.data.forEach((v: any, idx: number) => {
+        console.log(`    [${idx}] ${v.name} (${v.type}) - ${v.address?.country}`);
+      });
+
+      // Sélectionner la meilleure correspondance
+      let villeSelectionnee = responsesNominatim.data[0];
+      
+      // Prioriser les villes (pas les pays, régions, etc.)
+      const villes = responsesNominatim.data.filter((v: any) => {
+        const type = v.type || '';
+        return type === 'town' || type === 'city' || type === 'village' || type === 'hamlet';
+      });
+
+      if (villes.length > 0) {
+        villeSelectionnee = villes[0];
+        console.log(`  ✅ Ville sélectionnée: ${villeSelectionnee.name} (${villeSelectionnee.type})`);
+      } else {
+        console.log(`  ⚠️ Pas de ville trouvée par type, utilisation du premier résultat`);
+      }
+
+      // Valider les données essentielles
+      if (!villeSelectionnee.lat || !villeSelectionnee.lon) {
+        console.error(`  ❌ Coordonnées manquantes pour ${villeSelectionnee.name}`);
+        return null;
+      }
+
+      return {
+        codeInsee: villeSelectionnee.osm_id?.toString() || 'UNKNOWN',
+        nom:       villeSelectionnee.name,
+        latitude:  parseFloat(villeSelectionnee.lat),
+        longitude: parseFloat(villeSelectionnee.lon),
+      };
+
+    } catch (error) {
+      console.error(`  ❌ Erreur Nominatim:`, error instanceof Error ? error.message : String(error));
+      return null;
     }
   }
 
