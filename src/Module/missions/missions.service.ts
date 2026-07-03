@@ -216,12 +216,24 @@ async creerMission(
       this.obtenirInfoVille(dto.villeArrivee),
     ]);
 
-    // 3. Calculer la route
+    // 3. Calculer la route avec les COORDONNÉES (pas les noms)
     console.log('🚗 Calcul de la route...');
+    console.log(`📍 Départ: ${villeDepart.nom} (${villeDepart.latitude}, ${villeDepart.longitude}) - ${villeDepart.pays}`);
+    console.log(`📍 Arrivée: ${villeArrivee.nom} (${villeArrivee.latitude}, ${villeArrivee.longitude}) - ${villeArrivee.pays}`);
+    
+    // Détecter si on est en Tunisie
+    const isTunisia = villeDepart.pays === 'Tunisia' || villeArrivee.pays === 'Tunisia';
+    if (isTunisia) {
+      console.log('🌍 [TUNISIE DÉTECTÉE] Montant de péage = 0');
+    }
+    
     const calculRoute = await this.routeCalculator.calculerRouteParVilles(
-      dto.villeDepart,
-      dto.villeArrivee,
+      villeDepart.nom,
+      villeArrivee.nom,
       dto.typeVehicule,
+      { lat: villeDepart.latitude, lon: villeDepart.longitude },
+      { lat: villeArrivee.latitude, lon: villeArrivee.longitude },
+      isTunisia,
     );
 
     // 4. Convertir la durée et calculer la date de départ maximum
@@ -888,6 +900,7 @@ async searchMissionsByTrajet(
     nom: string;
     latitude: number;
     longitude: number;
+    pays?: string;
   }> {
     try {
       // 1️⃣ Essayer d'abord l'API française (geo.api.gouv.fr)
@@ -903,7 +916,7 @@ async searchMissionsByTrajet(
 
         if (responsesFr.data && Array.isArray(responsesFr.data) && responsesFr.data.length > 0) {
           const villesTriees = responsesFr.data
-            .filter((v: any) => v.centre)
+            .filter((v: any) => v.centre && this.nomVilleCorrespond(v.nom, nomVille))  // ✅ Validation du nom
             .sort((a: any, b: any) => (b.population || 0) - (a.population || 0));
 
           if (villesTriees.length > 0) {
@@ -914,6 +927,7 @@ async searchMissionsByTrajet(
               nom:       ville.nom,
               latitude:  ville.centre.coordinates[1],
               longitude: ville.centre.coordinates[0],
+              pays:      'France',
             };
           }
         }
@@ -963,11 +977,21 @@ async searchMissionsByTrajet(
     }
   }
 
+  private nomVilleCorrespond(nomRetourne: string, nomRecherche: string): boolean {
+    const normalizeStr = (s: string) => s.toLowerCase().trim().replace(/\s+/g, '');
+    const n1 = normalizeStr(nomRetourne);
+    const n2 = normalizeStr(nomRecherche);
+    
+    // Correspondance exacte ou contient la recherche
+    return n1 === n2 || n1.includes(n2) || n2.includes(n1);
+  }
+
   private async rechercherAvecNominatim(nomVille: string): Promise<{
     codeInsee: string;
     nom: string;
     latitude: number;
     longitude: number;
+    pays?: string;
   } | null> {
     try {
       const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(nomVille)}&format=json&limit=10&addressdetails=1`;
@@ -1021,6 +1045,7 @@ async searchMissionsByTrajet(
         nom:       villeSelectionnee.name,
         latitude:  parseFloat(villeSelectionnee.lat),
         longitude: parseFloat(villeSelectionnee.lon),
+        pays:      villeSelectionnee.address?.country || 'Unknown',
       };
 
     } catch (error) {

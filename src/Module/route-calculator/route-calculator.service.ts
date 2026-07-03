@@ -88,14 +88,22 @@ export class RouteCalculatorService {
     villeDepart  : string,
     villeArrivee : string,
     typeVehicule?: string,
+    coordDepart?: { lat: number; lon: number },
+    coordArrivee?: { lat: number; lon: number },
+    isTunisia?: boolean,
   ): Promise<RouteResult> {
     try {
+      // Si les coordonnées sont fournies, les utiliser directement
       const [coordonneesDepart, coordonneesArrivee] = await Promise.all([
-        this.geocoderVille(villeDepart),
-        this.geocoderVille(villeArrivee),
+        coordDepart 
+          ? Promise.resolve([coordDepart.lon, coordDepart.lat] as [number, number])
+          : this.geocoderVille(villeDepart),
+        coordArrivee
+          ? Promise.resolve([coordArrivee.lon, coordArrivee.lat] as [number, number])
+          : this.geocoderVille(villeArrivee),
       ]);
 
-      return this.calculerRoute(coordonneesDepart, coordonneesArrivee, typeVehicule);
+      return this.calculerRoute(coordonneesDepart, coordonneesArrivee, typeVehicule, isTunisia);
 
     } catch (error: unknown) {
       if (error instanceof HttpException) throw error;
@@ -113,6 +121,7 @@ export class RouteCalculatorService {
     coordonneesDepart  : [number, number],
     coordonneesArrivee : [number, number],
     typeVehicule?      : string,
+    isTunisia?         : boolean,
   ): Promise<RouteResult> {
     if (!this.apiKey) {
       throw new HttpException(
@@ -158,10 +167,13 @@ export class RouteCalculatorService {
       const dureeSecondes = summary.duration;
 
       const tarifKm       = TARIFS_KM[typeVehicule ?? ''] ?? this.prixParKm;
-      const fraisPeage    = this.fraisBase + distanceKm * tarifKm;
+      
+      // 🌍 Si Tunisie: fraisPeage = 0
+      const fraisPeage = isTunisia ? 0 : this.fraisBase + distanceKm * tarifKm;
+      
       const dureeFormatee = this.formaterDuree(dureeSecondes);
 
-      this.logger.log(`✅ Route | ${Math.round(distanceKm)} km | ${dureeFormatee} | ${Math.round(fraisPeage)} € | ${tarifKm}€/km`);
+      this.logger.log(`✅ Route | ${Math.round(distanceKm)} km | ${dureeFormatee} | ${Math.round(fraisPeage)} € | ${tarifKm}€/km ${isTunisia ? '(TUNISIE - péage 0)' : ''}`);
 
       return {
         distanceKm:   Math.round(distanceKm),
