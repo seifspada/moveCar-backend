@@ -1,0 +1,306 @@
+{
+  "project": "API Export Paramètres Score Logistique",
+  "description": "API REST pour exporter les données de paramètres du score logistique (sans calculer le score)",
+  "status": "✅ Prêt à l'emploi",
+  "version": "1.0.0",
+  "date": "2026-07-03",
+  
+  "endpoints": [
+    {
+      "name": "Health Check",
+      "method": "GET",
+      "path": "/score-ml/health",
+      "description": "Vérifier que le service est actif",
+      "response": {
+        "status": "OK",
+        "message": "Service Score ML actif - Export de parametres disponible"
+      }
+    },
+    {
+      "name": "Export Une Mission",
+      "method": "GET",
+      "path": "/score-ml/export/mission/{missionId}",
+      "description": "Exporte tous les paramètres pour une mission spécifique",
+      "params": [
+        {
+          "name": "missionId",
+          "type": "path",
+          "required": true,
+          "example": "550e8400-e29b-41d4-a716-446655440000"
+        }
+      ],
+      "response": {
+        "type": "ScoreParametersDto",
+        "fields": 30,
+        "example": {
+          "missionId": "550e8400-e29b-41d4-a716-446655440000",
+          "conducteurAge": 35,
+          "distanceKm": 250,
+          "retardDepart": 15,
+          "retardArrivee": 45,
+          "conditionsMeteo": "Sunny"
+        }
+      }
+    },
+    {
+      "name": "Export Plusieurs Missions",
+      "method": "GET",
+      "path": "/score-ml/export/missions",
+      "description": "Exporte un résumé pour plusieurs missions",
+      "params": [
+        {
+          "name": "ids",
+          "type": "query",
+          "required": true,
+          "format": "comma-separated",
+          "example": "mission1,mission2,mission3"
+        }
+      ],
+      "response": {
+        "type": "ScoreParametersSummaryDto[]",
+        "fields": 10,
+        "example": [
+          {
+            "missionId": "mission1",
+            "conducteur": "Jean Dupont",
+            "distanceKm": 250,
+            "retardDepart": 15
+          }
+        ]
+      }
+    }
+  ],
+
+  "files_created": [
+    {
+      "path": "src/Module/scores-ml/scores-ml.controller.ts",
+      "type": "Controller",
+      "size": "~400 lignes",
+      "description": "Contrôleur REST avec 3 endpoints",
+      "status": "✅ NEW"
+    },
+    {
+      "path": "src/Module/scores-ml/dto/export-score-parameters.dto.ts",
+      "type": "DTO",
+      "size": "~150 lignes",
+      "description": "2 classes DTO TypeScript",
+      "status": "✅ NEW"
+    },
+    {
+      "path": "SCORE_EXPORT_API.md",
+      "type": "Documentation",
+      "size": "~600 lignes",
+      "description": "Documentation complète détaillée",
+      "status": "✅ NEW"
+    },
+    {
+      "path": "API_EXPORT_SCORE_README.md",
+      "type": "Documentation",
+      "size": "~200 lignes",
+      "description": "README rapide en français",
+      "status": "✅ NEW"
+    },
+    {
+      "path": "IMPLEMENTATION_CHECKLIST.md",
+      "type": "Documentation",
+      "size": "~300 lignes",
+      "description": "Checklist implémentation complète",
+      "status": "✅ NEW"
+    },
+    {
+      "path": "test-api-export-score.sh",
+      "type": "Script",
+      "size": "~150 lignes",
+      "description": "Tests Bash avec 5 scénarios",
+      "status": "✅ NEW"
+    },
+    {
+      "path": "test-api-export-score.js",
+      "type": "Script",
+      "size": "~350 lignes",
+      "description": "Tests Node.js avec analyse automatique",
+      "status": "✅ NEW"
+    },
+    {
+      "path": "API-ENDPOINTS.json",
+      "type": "Reference",
+      "size": "Ce fichier",
+      "description": "Reference JSON des endpoints et fichiers",
+      "status": "✅ NEW"
+    }
+  ],
+
+  "files_modified": [
+    {
+      "path": "src/Module/scores-ml/scores-ml.service.ts",
+      "changes": "+205 lignes",
+      "additions": [
+        "Import: ScoreParametersDto, ScoreParametersSummaryDto",
+        "Méthode: exportScoreParameters(missionId)",
+        "Méthode: exportScoreParametersForMissions(missionIds)"
+      ],
+      "status": "✅ MODIFIED"
+    },
+    {
+      "path": "src/Module/scores-ml/scores-ml.module.ts",
+      "changes": "+2 lignes",
+      "additions": [
+        "Import: ScoresMlController",
+        "Configuration: controllers: [ScoresMlController]"
+      ],
+      "status": "✅ MODIFIED"
+    }
+  ],
+
+  "parameters_exported": {
+    "profil_conducteur": [
+      "conducteurAge",
+      "conducteurNom",
+      "conducteurPrenom",
+      "conducteurTelephone",
+      "noteAgentConducteur"
+    ],
+    "vehicule": [
+      "typeVehicule",
+      "etatVehicule",
+      "immatriculation"
+    ],
+    "timing": [
+      "dateDepart",
+      "dateArrivee",
+      "heureDepart",
+      "heureArrivee",
+      "departReel",
+      "arriveeReelle",
+      "retardDepart",
+      "retardArrivee",
+      "heureDépart",
+      "mois",
+      "joursemaine",
+      "saison"
+    ],
+    "distance_localisation": [
+      "distanceKm",
+      "distanceGPS",
+      "adresseDepart",
+      "adresseArrivee",
+      "villeDepartCodePostal",
+      "villeArriveeCodePostal",
+      "latitudeDepartReelle",
+      "longitudeDepartReelle",
+      "latitudeArriveeReelle",
+      "longitudeArriveeReelle",
+      "distanceArriveeReelleM"
+    ],
+    "conditions_externes": [
+      "conditionsMeteo"
+    ],
+    "scores": [
+      "scoreLogistiqueActuel",
+      "labelScorePrediction",
+      "scoreSecuriteActuel"
+    ],
+    "metadata": [
+      "missionId",
+      "sessionId",
+      "adherentId",
+      "statusMission",
+      "statusSession",
+      "dateExport",
+      "tempsExecution"
+    ]
+  },
+
+  "mapping_ml_service": {
+    "conducteurAge": "delivery_person_age",
+    "etatVehicule": "vehicle_condition",
+    "noteAgentConducteur": "delivery_person_ratings",
+    "distanceKm": "distance_km",
+    "retardDepart": "pickup_delay_min",
+    "retardArrivee": "delivery_delay_min",
+    "heureDépart": "order_hour",
+    "joursemaine": "order_day",
+    "conditionsMeteo": "weather_conditions",
+    "typeVehicule": "mission_type"
+  },
+
+  "quick_start": {
+    "health_check": "curl http://localhost:3000/score-ml/health",
+    "export_mission": "curl http://localhost:3000/score-ml/export/mission/MISSION_ID",
+    "export_missions": "curl \"http://localhost:3000/score-ml/export/missions?ids=id1,id2,id3\"",
+    "test_bash": "bash test-api-export-score.sh",
+    "test_nodejs": "node test-api-export-score.js"
+  },
+
+  "documentation_files": [
+    {
+      "name": "SCORE_EXPORT_API.md",
+      "purpose": "Documentation technique complète",
+      "sections": [
+        "Vue d'ensemble",
+        "Endpoints détaillés",
+        "Paramètres avec descriptions",
+        "Cas d'usage pratiques",
+        "Exemples de code (Python, JS)",
+        "Mapping avec ML service",
+        "Guide d'intégration"
+      ]
+    },
+    {
+      "name": "API_EXPORT_SCORE_README.md",
+      "purpose": "Guide rapide et démarrage",
+      "sections": [
+        "Résumé 2 minutes",
+        "Endpoints clés",
+        "Tableau des paramètres",
+        "Utilisation rapide",
+        "Cas d'usage"
+      ]
+    },
+    {
+      "name": "IMPLEMENTATION_CHECKLIST.md",
+      "purpose": "Vue complète de l'implémentation",
+      "sections": [
+        "Fichiers créés/modifiés",
+        "Paramètres exportés",
+        "Notes d'implémentation",
+        "Support & debugging",
+        "Prochaines étapes"
+      ]
+    }
+  ],
+
+  "quality_assurance": {
+    "compilation": "✅ Pas d'erreurs TypeScript",
+    "imports": "✅ Tous les imports présents",
+    "dependencies": "✅ Aucune dépendance manquante",
+    "backward_compatibility": "✅ Aucun changement breaking",
+    "documentation": "✅ Complète et détaillée",
+    "test_coverage": "✅ 5 scénarios de test"
+  },
+
+  "usage_examples": {
+    "curl": [
+      "curl http://localhost:3000/score-ml/health",
+      "curl http://localhost:3000/score-ml/export/mission/550e8400-e29b-41d4-a716-446655440000",
+      "curl \"http://localhost:3000/score-ml/export/missions?ids=m1,m2,m3\""
+    ],
+    "python": "import requests; resp = requests.get('http://localhost:3000/score-ml/export/mission/ID'); data = resp.json()",
+    "javascript": "fetch('/score-ml/export/mission/ID').then(r => r.json()).then(data => console.log(data))",
+    "jq": "curl .../mission/ID | jq '.retardDepart, .retardArrivee'"
+  },
+
+  "version_info": {
+    "api_version": "1.0.0",
+    "nestjs_version": "compatible",
+    "typescript": "5.0+",
+    "node": "18.0+"
+  },
+
+  "support": {
+    "error_mission_not_found": "Vérifier l'ID mission en base / S'assurer qu'elle a une session complétée",
+    "error_incomplete_data": "Vérifier que la mission a session/reservation/adherent/vehicule",
+    "error_no_response": "Tester /score-ml/health et vérifier les logs NestJS",
+    "documentation": "Voir SCORE_EXPORT_API.md pour détails complets"
+  }
+}

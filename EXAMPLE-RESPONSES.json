@@ -1,0 +1,214 @@
+{
+  "_comment": "Exemples de réponses JSON de l'API Export Score Logistique",
+  
+  "example_health_check": {
+    "endpoint": "GET /score-ml/health",
+    "response": {
+      "status": "OK",
+      "message": "Service Score ML actif - Export de parametres disponible"
+    }
+  },
+
+  "example_export_single_mission": {
+    "endpoint": "GET /score-ml/export/mission/550e8400-e29b-41d4-a716-446655440000",
+    "response": {
+      "missionId": "550e8400-e29b-41d4-a716-446655440000",
+      "sessionId": "session-abc-123",
+      "adherentId": 5,
+      
+      "conducteurAge": 35,
+      "conducteurNom": "Dupont",
+      "conducteurPrenom": "Jean",
+      "conducteurTelephone": "+33612345678",
+      "noteAgentConducteur": 4.5,
+      
+      "typeVehicule": "VU_6M3",
+      "etatVehicule": 2,
+      "immatriculation": "AB-123-CD",
+      
+      "dateDepart": "2026-07-03T08:00:00.000Z",
+      "dateArrivee": "2026-07-03T17:00:00.000Z",
+      "heureDepart": "08:00",
+      "heureArrivee": "17:00",
+      
+      "departReel": "2026-07-03T08:15:30.000Z",
+      "arriveeReelle": "2026-07-03T17:45:20.000Z",
+      
+      "retardDepart": 15,
+      "retardArrivee": 45,
+      
+      "distanceKm": 250,
+      "distanceGPS": 265,
+      
+      "adresseDepart": "123 Rue de Paris, 75001 Paris",
+      "villeDepartCodePostal": "Paris",
+      "latitudeDepartReelle": 48.8566,
+      "longitudeDepartReelle": 2.3522,
+      
+      "adresseArrivee": "456 Avenue des Champs, 78000 Versailles",
+      "villeArriveeCodePostal": "Versailles",
+      "latitudeArriveeReelle": 48.8014,
+      "longitudeArriveeReelle": 2.1399,
+      "distanceArriveeReelleM": 125,
+      
+      "conditionsMeteo": "Sunny",
+      "joursemaine": 4,
+      
+      "heureDépart": 8,
+      "mois": 7,
+      "saison": "Été",
+      
+      "statusMission": "TERMINEE",
+      "statusSession": "TERMINEE",
+      
+      "scoreLogistiqueActuel": 3.8,
+      "labelScorePrediction": "Bon",
+      "scoreSecuriteActuel": 4.1,
+      
+      "dateExport": "2026-07-03T18:00:00.000Z",
+      "tempsExecution": 245
+    }
+  },
+
+  "example_export_multiple_missions": {
+    "endpoint": "GET /score-ml/export/missions?ids=mission1,mission2,mission3",
+    "response": [
+      {
+        "missionId": "mission-uuid-1",
+        "conducteur": "Jean Dupont",
+        "adresseDepart": "123 Rue de Paris, 75001",
+        "adresseArrivee": "456 Avenue Champs, 78000",
+        "distanceKm": 250,
+        "retardDepart": 15,
+        "retardArrivee": 45,
+        "dateDepart": "2026-07-03T08:00:00.000Z",
+        "dateArrivee": "2026-07-03T17:00:00.000Z",
+        "scoreLogistique": 3.8,
+        "status": "TERMINEE"
+      },
+      {
+        "missionId": "mission-uuid-2",
+        "conducteur": "Marie Durand",
+        "adresseDepart": "789 Rue Lyon, 69000",
+        "adresseArrivee": "111 Avenue Bellecour, 69000",
+        "distanceKm": 45,
+        "retardDepart": 0,
+        "retardArrivee": 5,
+        "dateDepart": "2026-07-03T09:00:00.000Z",
+        "dateArrivee": "2026-07-03T10:00:00.000Z",
+        "scoreLogistique": 4.5,
+        "status": "TERMINEE"
+      },
+      {
+        "missionId": "mission-uuid-3",
+        "conducteur": "Pierre Martin",
+        "adresseDepart": "321 Rue Nice, 06000",
+        "adresseArrivee": "654 Boulevard Cannes, 06400",
+        "distanceKm": 180,
+        "retardDepart": -5,
+        "retardArrivee": 120,
+        "dateDepart": "2026-07-03T07:00:00.000Z",
+        "dateArrivee": "2026-07-03T11:00:00.000Z",
+        "scoreLogistique": 2.1,
+        "status": "TERMINEE"
+      }
+    ]
+  },
+
+  "error_examples": {
+    "mission_not_found": {
+      "status": 404,
+      "response": {
+        "statusCode": 404,
+        "message": "Mission 550e8400-e29b-41d4-a716-446655440001 introuvable"
+      }
+    },
+    "incomplete_data": {
+      "status": 400,
+      "response": {
+        "statusCode": 400,
+        "message": "Données incomplètes pour la mission xxx: session/reservation/adherent manquantes"
+      }
+    },
+    "missing_ids_parameter": {
+      "status": 400,
+      "response": {
+        "statusCode": 400,
+        "message": "Parametre \"ids\" requis: GET /score-ml/export/missions?ids=id1,id2,id3"
+      }
+    }
+  },
+
+  "field_descriptions": {
+    "missionId": "UUID unique de la mission",
+    "sessionId": "UUID unique de la session de la mission",
+    "adherentId": "ID numérique du conducteur/adhérent",
+    
+    "conducteurAge": "Age en années (calculé à partir de dateNaissance)",
+    "conducteurNom": "Nom de famille du conducteur",
+    "conducteurPrenom": "Prénom du conducteur",
+    "conducteurTelephone": "Numéro de téléphone du conducteur",
+    "noteAgentConducteur": "Note du conducteur (1.0 à 5.0 étoiles)",
+    
+    "typeVehicule": "Type du véhicule (CITADINE, VU_6M3, VU_12M3, etc.)",
+    "etatVehicule": "État du véhicule (0, 1, ou 2)",
+    "immatriculation": "Plaque d'immatriculation du véhicule",
+    
+    "dateDepart": "Date et heure prévue de départ",
+    "dateArrivee": "Date et heure prévue d'arrivée",
+    "heureDepart": "Heure de départ prévue (HH:mm)",
+    "heureArrivee": "Heure d'arrivée prévue (HH:mm)",
+    
+    "departReel": "Date et heure réelle du départ",
+    "arriveeReelle": "Date et heure réelle de l'arrivée",
+    
+    "retardDepart": "Retard à la sécurité en minutes (0 = à l'heure)",
+    "retardArrivee": "Retard à l'arrivée en minutes (0 = à l'heure)",
+    
+    "distanceKm": "Distance de la mission en kilomètres",
+    "distanceGPS": "Distance réelle parcourue basée sur GPS en km (si disponible)",
+    
+    "adresseDepart": "Adresse complète du point de départ",
+    "villeDepartCodePostal": "Ville du point de départ",
+    "latitudeDepartReelle": "Latitude GPS réelle du départ",
+    "longitudeDepartReelle": "Longitude GPS réelle du départ",
+    
+    "adresseArrivee": "Adresse complète du point d'arrivée",
+    "villeArriveeCodePostal": "Ville du point d'arrivée",
+    "latitudeArriveeReelle": "Latitude GPS réelle de l'arrivée",
+    "longitudeArriveeReelle": "Longitude GPS réelle de l'arrivée",
+    "distanceArriveeReelleM": "Écart en mètres entre position GPS réelle et point d'arrivée prévU",
+    
+    "conditionsMeteo": "Conditions météo (Sunny, Cloudy, Windy, Fog, Stormy, Sandstorms)",
+    "joursemaine": "Jour de la semaine (0=Lundi, 1=Mardi, ..., 6=Dimanche)",
+    
+    "heureDépart": "Heure de départ en format 24h (0-23)",
+    "mois": "Numéro du mois (1-12)",
+    "saison": "Saison (Hiver, Printemps, Été, Automne)",
+    
+    "statusMission": "Statut de la mission (EN_ATTENTE, EN_COURS, TERMINEE, etc.)",
+    "statusSession": "Statut de la session (EN_COURS, TERMINEE)",
+    
+    "scoreLogistiqueActuel": "Score logistique ML existant (si calculé)",
+    "labelScorePrediction": "Label de prédiction du score (Faible, Moyen, Bon, Excellent)",
+    "scoreSecuriteActuel": "Score de sécurité ML existant (si calculé)",
+    
+    "dateExport": "Date et heure de l'export",
+    "tempsExecution": "Temps d'exécution de la requête en millisecondes"
+  },
+
+  "response_times": {
+    "health_check": "~5ms",
+    "single_mission": "~250-500ms",
+    "multiple_missions_3": "~750ms-1.5s",
+    "multiple_missions_10": "~2-3s"
+  },
+
+  "data_availability_notes": {
+    "distanceGPS": "Optionnel - présent si les kilométrages début/fin sont disponibles",
+    "arriveeReelle": "Optionnel - null si la mission n'est pas terminée",
+    "dateArrivee": "Optionnel - peut être null si pas de planning d'arrivée",
+    "scoreLogistiqueActuel": "Optionnel - null si le score n'a pas été calculé",
+    "scoreSecuriteActuel": "Optionnel - null si pas de score de sécurité"
+  }
+}

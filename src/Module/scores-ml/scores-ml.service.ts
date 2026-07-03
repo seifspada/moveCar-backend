@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ScoreParametersDto, ScoreParametersSummaryDto } from './dto/export-score-parameters.dto';
 import { firstValueFrom } from 'rxjs';
 
 @Injectable()
@@ -308,5 +309,269 @@ export class ScoresMlService {
       );
       throw error;
     }
+  }
+
+  // ── EXPORT DES PARAMETRES DE SCORE ────────────────────────────────────
+  /**
+   * Exporte tous les paramètres utilisés pour calculer le score logistique
+   * SANS calculer le score
+   */
+  async exportScoreParameters(missionId: string): Promise<ScoreParametersDto> {
+    const startTime = Date.now();
+    
+    this.logger.log(`Export des parametres de score pour la mission ${missionId}`);
+
+    try {
+      const mission = await this.prisma.mission.findUnique({
+        where: { id: missionId },
+        include: {
+          vehicule: true,
+          adresseDepart: true,
+          adresseArrivee: true,
+          calculs: true,
+          disponibilite: true,
+          sessions: {
+            orderBy: { dateFin: 'desc' },
+            take: 1,
+            include: {
+              reservation: {
+                include: {
+                  adherent: {
+                    include: {
+                      user: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!mission) {
+        throw new Error(`Mission ${missionId} introuvable`);
+      }
+
+      const session = mission.sessions?.[0];
+      const reservation = session?.reservation;
+      const adherent = reservation?.adherent;
+
+      if (!session || !reservation || !adherent) {
+        throw new Error(
+          `Données incomplètes pour la mission ${missionId}: session/reservation/adherent manquantes`,
+        );
+      }
+
+      // Calcul de l'âge
+      let age = 35;
+      if (adherent.dateNaissance) {
+        const diff = Date.now() - new Date(adherent.dateNaissance).getTime();
+        age = Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+      }
+
+      // Distances
+      const distanceKm = Number(reservation.distanceKm ?? mission.calculs?.distanceKm ?? 100);
+
+      // Vérification de la zone d'arrivée
+      const arrivalCheck = this.checkArrivalCity(session, mission.adresseArrivee);
+      const distanceArriveeReelleM = arrivalCheck.distanceMeters;
+
+      // Conditions météo
+      const weatherCond = await this.fetchWeatherConditions(
+        Number(mission.adresseDepart.latitude),
+        Number(mission.adresseDepart.longitude),
+      );
+
+      // Dates et heures planifiées
+      const plannedDeparture =
+        this.buildDateTime(reservation.dateDepart, reservation.heureDepart) ??
+        mission.disponibilite?.dateDebut ??
+        session.dateDebut;
+
+      const plannedArrival =
+        this.buildDateTime(reservation.dateArrivee, reservation.heureArrivee) ??
+        mission.disponibilite?.dateFin;
+
+      // Jour de la semaine
+      const dayOfWeek = plannedDeparture.getDay();
+      const mappedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+
+      // Délais en minutes
+      const pickupDelayMin = this.getPositiveDelayMinutes(session.dateDebut, plannedDeparture);
+      const deliveryDelayMin = plannedArrival
+        ? this.getPositiveDelayMinutes(session.dateFin || new Date(), plannedArrival)
+        : 0;
+
+      // Saison
+      const month = plannedDeparture.getMonth();
+      let saison = 'Printemps';
+      if (month >= 11 || month <= 1) saison = 'Hiver';
+      else if (month >= 2 && month <= 4) saison = 'Printemps';
+      else if (month >= 5 && month <= 7) saison = 'Été';
+      else saison = 'Automne';
+
+      const parameters: ScoreParametersDto = {
+        // Identifiants
+        missionId,
+        sessionId: session.id,
+        adherentId: adherent.id,
+
+        // Profil du conducteur
+        conducteurAge: age,
+        conducteurNom: adherent.nom,
+        conducteurPrenom: adherent.prenom,
+        conducteurTelephone: adherent.telephone,
+        noteAgentConducteur: mission.noteAgent ?? 4.0,
+
+        // Véhicule
+        typeVehicule: mission.vehicule.typeVehicule,
+        etatVehicule: 2,
+        immatriculation: mission.vehicule.immatriculation || 'N/A',
+
+        // Mission - Paramètres temporels
+        dateDepart: reservation.dateDepart || plannedDeparture,
+        dateArrivee: reservation.dateArrivee || plannedArrival,
+        heureDepart: reservation.heureDepart,
+        heureArrivee: reservation.heureArrivee,
+
+        // Mission - Dates réelles
+        departReel: session.dateDebut,
+        arriveeReelle: session.dateFin,
+
+        // Mission - Délais
+        retardDepart: pickupDelayMin,
+        retardArrivee: deliveryDelayMin,
+
+        // Mission - Distances
+        distanceKm,
+        distanceGPS: session.kilometrageFin
+          ? Math.abs(
+              (session.kilometrageFin ?? 0) - (session.kilometrageDebut ?? 0),
+            )
+          : null,
+
+        // Mission - Positions
+        adresseDepart: mission.adresseDepart.adresseComplete,
+        villeDepartCodePostal: mission.adresseDepart.villeNom,
+        latitudeDepartReelle: Number(session.latitudeDebut) || 0,
+        longitudeDepartReelle: Number(session.longitudeDebut) || 0,
+
+        adresseArrivee: mission.adresseArrivee.adresseComplete,
+        villeArriveeCodePostal: mission.adresseArrivee.villeNom,
+        latitudeArriveeReelle: Number(session.latitudeFin) || 0,
+        longitudeArriveeReelle: Number(session.longitudeFin) || 0,
+        distanceArriveeReelleM,
+
+        // Conditions externes
+        conditionsMeteo: weatherCond,
+        joursemaine: mappedDay,
+
+        // Timing
+        heureDépart: plannedDeparture.getHours(),
+        mois: plannedDeparture.getMonth() + 1,
+        saison,
+
+        // Statut
+        statusMission: mission.statut,
+        statusSession: session.statut,
+
+        // Scores existants
+        scoreLogistiqueActuel: mission.scoreLogistique,
+        labelScorePrediction: mission.scorePredictedLabel,
+        scoreSecuriteActuel: mission.scoreSecurite,
+
+        // Métadonnées
+        dateExport: new Date(),
+        tempsExecution: Date.now() - startTime,
+      };
+
+      this.logger.log(
+        `Parametres de score exportes pour mission ${missionId} (${Date.now() - startTime}ms)`,
+      );
+
+      return parameters;
+    } catch (error) {
+      this.logger.error(
+        `Erreur lors de l'export des parametres pour la mission ${missionId}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Exporte les paramètres pour une liste de missions
+   */
+  async exportScoreParametersForMissions(
+    missionIds: string[],
+  ): Promise<ScoreParametersSummaryDto[]> {
+    this.logger.log(`Export des parametres pour ${missionIds.length} missions`);
+
+    const missions = await this.prisma.mission.findMany({
+      where: { id: { in: missionIds } },
+      include: {
+        vehicule: true,
+        adresseDepart: true,
+        adresseArrivee: true,
+        calculs: true,
+        disponibilite: true,
+        sessions: {
+          orderBy: { dateFin: 'desc' },
+          take: 1,
+          include: {
+            reservation: {
+              include: {
+                adherent: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const summaries: ScoreParametersSummaryDto[] = [];
+
+    for (const mission of missions) {
+      const session = mission.sessions?.[0];
+      const reservation = session?.reservation;
+      const adherent = reservation?.adherent;
+
+      if (!session || !reservation || !adherent) {
+        this.logger.warn(`Mission ${mission.id} : donnees incompletes, ignoree`);
+        continue;
+      }
+
+      const plannedDeparture =
+        this.buildDateTime(reservation.dateDepart, reservation.heureDepart) ??
+        mission.disponibilite?.dateDebut ??
+        session.dateDebut;
+
+      const plannedArrival =
+        this.buildDateTime(reservation.dateArrivee, reservation.heureArrivee) ??
+        mission.disponibilite?.dateFin;
+
+      const distanceKm = Number(reservation.distanceKm ?? mission.calculs?.distanceKm ?? 100);
+      const pickupDelayMin = this.getPositiveDelayMinutes(session.dateDebut, plannedDeparture);
+      const deliveryDelayMin = plannedArrival
+        ? this.getPositiveDelayMinutes(session.dateFin || new Date(), plannedArrival)
+        : 0;
+
+      summaries.push({
+        missionId: mission.id,
+        conducteur: `${adherent.prenom} ${adherent.nom}`,
+        adresseDepart: mission.adresseDepart.adresseComplete,
+        adresseArrivee: mission.adresseArrivee.adresseComplete,
+        distanceKm,
+        retardDepart: pickupDelayMin,
+        retardArrivee: deliveryDelayMin,
+        dateDepart: plannedDeparture,
+        dateArrivee: plannedArrival,
+        scoreLogistique: mission.scoreLogistique,
+        status: mission.statut,
+      });
+    }
+
+    this.logger.log(`${summaries.length} missions exportees avec succes`);
+    return summaries;
   }
 }
