@@ -221,8 +221,13 @@ async creerMission(
     console.log(`📍 Départ: ${villeDepart.nom} (${villeDepart.latitude}, ${villeDepart.longitude}) - ${villeDepart.pays}`);
     console.log(`📍 Arrivée: ${villeArrivee.nom} (${villeArrivee.latitude}, ${villeArrivee.longitude}) - ${villeArrivee.pays}`);
     
-    // Détecter si on est en Tunisie
-    const isTunisia = villeDepart.pays === 'Tunisia' || villeArrivee.pays === 'Tunisia';
+    // Détecter si on est en Tunisie (Nominatim peut retourner le nom en anglais, français ou arabe)
+    const isTunisianCity = (pays?: string) => {
+      if (!pays) return false;
+      const p = pays.toLowerCase();
+      return p.includes('tunisia') || p.includes('tunisie') || p === 'tn' || p.includes('تونس');
+    };
+    const isTunisia = isTunisianCity(villeDepart.pays) || isTunisianCity(villeArrivee.pays);
     if (isTunisia) {
       console.log('🌍 [TUNISIE DÉTECTÉE] Montant de péage = 0');
     }
@@ -909,6 +914,7 @@ async searchMissionsByTrajet(
         const responsesFr = await firstValueFrom(
           this.httpService.get(
             `https://geo.api.gouv.fr/communes?nom=${encodeURIComponent(nomVille)}&fields=code,nom,centre,population&limit=10`,
+            { timeout: 5000 }, // ✅ Évite de bloquer plus de 5s si l'API française est lente
           ),
         );
 
@@ -1022,9 +1028,10 @@ async searchMissionsByTrajet(
       let villeSelectionnee = responsesNominatim.data[0];
       
       // Prioriser les villes (pas les pays, régions, etc.)
+      // Note: en Tunisie, certaines villes sont taggées 'administrative' dans OSM
       const villes = responsesNominatim.data.filter((v: any) => {
         const type = v.type || '';
-        return type === 'town' || type === 'city' || type === 'village' || type === 'hamlet';
+        return type === 'town' || type === 'city' || type === 'village' || type === 'hamlet' || type === 'administrative' || type === 'suburb';
       });
 
       if (villes.length > 0) {
