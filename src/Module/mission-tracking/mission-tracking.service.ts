@@ -799,4 +799,24 @@ constructor(
       trackings.length;
     return { latitude: avgLat, longitude: avgLng };
   }
-}
+
+
+/**
+   * Récupère uniquement la dernière position GPS connue d'une mission
+   * Optimisé pour l'affichage carte (évite de charger tout l'historique)
+   */
+  async getCurrentLocation(
+    missionId: string,
+    userId: number,
+  ): Promise<MissionTracking | null> {
+    await this.assertMissionAccess(missionId, userId);
+
+    const lastTracking = await this.prisma.missionGPSTrack.findFirst({
+      where: { session: { missionId } },
+      orderBy: { timestamp: 'desc' },
+    });
+
+    return lastTracking as any as MissionTracking | null;
+  }
+
+  }

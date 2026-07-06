@@ -98,7 +98,7 @@ export class MissionTrackingResolver {
   @Mutation(() => MissionTracking, {
     description: 'Enregistre une position GPS pendant la mission',
   })
-  @Roles(Role.ADHERENT)
+  @Roles(Role.ADHERENT, Role.AGENT)
   async updateMissionLocation(
     @Args('input') input: UpdateLocationInput,
     @CurrentUser() user: { id: number; role: Role },
@@ -227,4 +227,18 @@ export class MissionTrackingResolver {
   ): Promise<MissionIncidentResult[]> {
     return this.missionTrackingService.getIncidents(sessionId, user.id);
   }
+
+
+@Query(() => MissionTracking, {
+    description: 'Récupère uniquement la dernière position GPS connue — optimisé pour affichage carte',
+    nullable: true,
+  })
+  @Roles(Role.ADHERENT, Role.AGENT, Role.ADMIN)
+  async getMissionCurrentLocation(
+    @Args('missionId', { type: () => ID }) missionId: string,
+    @CurrentUser() user: { id: number; role: Role },
+  ): Promise<MissionTracking | null> {
+    return this.missionTrackingService.getCurrentLocation(missionId, user.id);
+  }
+
 }

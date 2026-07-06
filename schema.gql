@@ -692,6 +692,11 @@ type Query {
   getMissionCompletion(missionId: ID!): MissionCompletion
 
   """
+  Récupère uniquement la dernière position GPS connue — optimisé pour affichage carte
+  """
+  getMissionCurrentLocation(missionId: ID!): MissionTracking
+
+  """
   Liste tous les incidents d'une session avec leurs photos — accessible au convoyeur et à l'agent
   """
   getMissionIncidents(sessionId: ID!): [MissionIncidentResult!]!

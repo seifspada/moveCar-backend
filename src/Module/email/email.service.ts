@@ -62,7 +62,7 @@ await this.sendMail({
   async sendWelcomeEmail(email: string, name: string) {
     return this.sendMail({
       to: email,
-      subject: 'Bienvenue sur Revolution',
+      subject: 'Bienvenue sur MoveCar',
       html: `<h2>Bienvenue ${name}!</h2>`,
     });
   }
@@ -83,12 +83,12 @@ async sendDemandeRecueAdherent(data: {
 }) {
   const nomComplet = data.prenom ? `${data.prenom} ${data.nom}` : data.nom;
   
-  const subject = "✅ Demande d'adhésion reçue - Revolution";
+  const subject = "✅ Demande d'adhésion reçue - MoveCar";
   
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0; font-size: 28px;">🚗 Revolution</h1>
+        <h1 style="color: white; margin: 0; font-size: 28px;">🚗 MoveCar</h1>
         <p style="color: #fed7aa; margin: 10px 0 0 0;">Demande d'adhésion</p>
       </div>
       
@@ -100,7 +100,7 @@ async sendDemandeRecueAdherent(data: {
         </p>
         
         <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-          Nous avons bien reçu votre demande d'adhésion à Revolution. 
+          Nous avons bien reçu votre demande d'adhésion à MoveCar. 
           Nous sommes ravis de votre intérêt pour nos services de transport !
         </p>
         
@@ -127,7 +127,7 @@ async sendDemandeRecueAdherent(data: {
             Des questions ? Notre équipe est à votre disposition
           </p>
           <p style="margin: 5px 0; color: #1f2937; font-size: 15px;">
-            📧 <strong>${process.env.EMAIL_USER || 'contact@revolution.tn'}</strong>
+            📧 <strong>${process.env.EMAIL_USER || 'contact@moveCar.tn'}</strong>
           </p>
         </div>
         
@@ -137,7 +137,7 @@ async sendDemandeRecueAdherent(data: {
         
         <p style="font-size: 16px; color: #374151; margin-top: 20px;">
           Cordialement,<br>
-          <strong style="color: #ea580c;">L'équipe Revolution</strong>
+          <strong style="color: #ea580c;">L'équipe MoveCar</strong>
         </p>
       </div>
       
@@ -187,7 +187,7 @@ async sendNouvelleDemandeAdmin(data: {
         minute: '2-digit'
       });
 
-  const subject = "🔔 Nouvelle demande d'adhésion - Revolution";
+  const subject = "🔔 Nouvelle demande d'adhésion - MoveCar";
   
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -200,7 +200,7 @@ async sendNouvelleDemandeAdmin(data: {
         <h2 style="color: #1d4ed8; margin-top: 0;">Nouvelle demande reçue</h2>
         
         <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-          Une nouvelle demande d'adhésion vient d'être soumise sur la plateforme Revolution.
+          Une nouvelle demande d'adhésion vient d'être soumise sur la plateforme MoveCar.
         </p>
         
         <div style="background-color: #f3f4f6; border-left: 4px solid #3b82f6; padding: 20px; margin: 25px 0; border-radius: 8px;">
@@ -256,20 +256,20 @@ async sendNouvelleDemandeAdmin(data: {
         </div>
         
         <div style="text-align: center; margin: 30px 0;">
-          <a href="${process.env.ADMIN_DASHBOARD_URL || 'https://admin.revolution.tn'}/demandes" 
+          <a href="${process.env.ADMIN_DASHBOARD_URL || 'https://admin.moveCar.tn'}/demandes" 
              style="background-color: #f75002; color: white; padding: 12px 30px; text-decoration: none; border-radius: 25px; font-weight: bold; display: inline-block;">
             📊 Voir dans le tableau de bord
           </a>
         </div>
         
         <p style="font-size: 14px; color: #6b7280; margin-top: 30px; text-align: center;">
-          Notification automatique du système Revolution
+          Notification automatique du système MoveCar
         </p>
       </div>
       
       <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 10px 10px;">
         <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-          Cet email a été envoyé automatiquement par le système Revolution.
+          Cet email a été envoyé automatiquement par le système MoveCar.
         </p>
       </div>
     </div>
@@ -335,20 +335,20 @@ async sendWelcomeAdherent(data: {
 }) {
   const nomComplet = `${data.prenom} ${data.nom}`;
   
-  const subject = '🎉 Bienvenue chez Revolution - Votre compte est activé !';
+  const subject = '🎉 Bienvenue chez MoveCar - Votre compte est activé !';
   
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
         <h1 style="color: white; margin: 0; font-size: 28px;">🎉 Bienvenue !</h1>
-        <p style="color: #d1fae5; margin: 10px 0 0 0;">Votre compte Revolution est activé</p>
+        <p style="color: #d1fae5; margin: 10px 0 0 0;">Votre compte MoveCar est activé</p>
       </div>
       
       <div style="background-color: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none;">
         <h2 style="color: #16a34a; margin-top: 0;">Félicitations ${nomComplet} !</h2>
         
         <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-          Nous sommes ravis de vous accueillir dans la <strong>communauté Revolution</strong> ! 
+          Nous sommes ravis de vous accueillir dans la <strong>communauté MoveCar</strong> ! 
           Votre compte a été créé avec succès et vous pouvez maintenant profiter de tous nos services.
         </p>
         
@@ -424,22 +424,22 @@ async sendWelcomeAdherent(data: {
         <div style="background-color: #fef2f2; border: 1px solid #fca5a5; padding: 15px; border-radius: 8px; margin: 25px 0;">
           <p style="margin: 0; color: #991b1b; font-size: 13px;">
             ⚠️ <strong>Sécurité :</strong> Ne partagez jamais votre mot de passe. 
-            Revolution ne vous demandera jamais vos identifiants par email ou par téléphone.
+            MoveCar ne vous demandera jamais vos identifiants par email ou par téléphone.
           </p>
         </div>
         
         <p style="font-size: 16px; color: #374151; margin-top: 30px; text-align: center;">
-          Bon travail avec Revolution !<br>
-          <strong style="color: #ea580c;">L'équipe Revolution</strong>
+          Bon travail avec MoveCar !<br>
+          <strong style="color: #ea580c;">L'équipe MoveCar</strong>
         </p>
       </div>
       
       <div style="background-color: #f9fafb; padding: 20px; text-align: center; border-radius: 0 0 10px 10px;">
         <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 12px;">
-          Vous recevez cet email car vous avez créé un compte sur Revolution.
+          Vous recevez cet email car vous avez créé un compte sur MoveCar.
         </p>
         <p style="margin: 0; color: #9ca3af; font-size: 12px;">
-          © ${new Date().getFullYear()} Revolution. Tous droits réservés.
+          © ${new Date().getFullYear()} MoveCar. Tous droits réservés.
         </p>
       </div>
     </div>
@@ -449,7 +449,7 @@ async sendWelcomeAdherent(data: {
     to: data.email,
     subject,
     html,
-    text: `Bienvenue ${nomComplet} ! Votre compte Revolution est activé. Connectez-vous dès maintenant : ${process.env.FRONTEND_URL}/auth/login`
+    text: `Bienvenue ${nomComplet} ! Votre compte MoveCar est activé. Connectez-vous dès maintenant : ${process.env.FRONTEND_URL}/auth/login`
   });
 }
 
@@ -479,12 +479,12 @@ async sendDemandePartenaireConfirmation(data: {
     ? '📞 Rendez-vous téléphonique' 
     : '🏢 Rendez-vous physique';
 
-  const subject = '✅ Demande de partenariat reçue - Revolution';
+  const subject = '✅ Demande de partenariat reçue - MoveCar';
   
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0; font-size: 28px;">🤝 Revolution</h1>
+        <h1 style="color: white; margin: 0; font-size: 28px;">🤝 MoveCar</h1>
         <p style="color: #fed7aa; margin: 10px 0 0 0;">Demande de partenariat</p>
       </div>
       
@@ -535,7 +535,7 @@ async sendDemandePartenaireConfirmation(data: {
         
         <p style="font-size: 16px; color: #374151; margin-top: 20px;">
           Cordialement,<br>
-          <strong style="color: #ea580c;">L'équipe Revolution</strong>
+          <strong style="color: #ea580c;">L'équipe MoveCar</strong>
         </p>
       </div>
       
@@ -682,7 +682,7 @@ async sendNotificationNouvelleDemandePartenaire(data: {
       
       <div style="background-color: #f9fafb; padding: 15px; text-align: center; border-radius: 0 0 10px 10px;">
         <p style="margin: 0; color: #9ca3af; font-size: 11px;">
-          Email envoyé automatiquement par le système Revolution
+          Email envoyé automatiquement par le système MoveCar
         </p>
       </div>
     </div>
@@ -775,7 +775,7 @@ async sendConfirmationRendezvousPartenaire(data: {
         
         <p style="font-size: 16px; color: #374151; margin-top: 20px;">
           À très bientôt,<br>
-          <strong style="color: #ea580c;">L'équipe Revolution</strong>
+          <strong style="color: #ea580c;">L'équipe MoveCar</strong>
         </p>
       </div>
       
@@ -899,7 +899,7 @@ async sendPartenaireDemandeRefusee(
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background-color: #1f2937; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0; font-size: 24px;">Revolution</h1>
+        <h1 style="color: white; margin: 0; font-size: 24px;">MoveCar</h1>
       </div>
       
       <div style="background-color: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none;">
@@ -908,7 +908,7 @@ async sendPartenaireDemandeRefusee(
         </p>
         
         <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-          Nous vous remercions pour l'intérêt que vous portez à <strong>Revolution</strong> 
+          Nous vous remercions pour l'intérêt que vous portez à <strong>MoveCar</strong> 
           et pour votre demande de partenariat concernant <strong>${entite}</strong>.
         </p>
         
@@ -936,7 +936,7 @@ async sendPartenaireDemandeRefusee(
         
         <p style="font-size: 16px; color: #374151; margin-top: 25px;">
           Cordialement,<br>
-          <strong>L'équipe Revolution</strong>
+          <strong>L'équipe MoveCar</strong>
         </p>
       </div>
       
@@ -1105,7 +1105,7 @@ async sendConfirmationAlerteGeographique(
           
           <p style="font-size: 16px; color: #374151; margin-top: 20px; text-align: center;">
             Bonne route !<br>
-            <strong style="color: #ea580c;">L'équipe Revolution</strong>
+            <strong style="color: #ea580c;">L'équipe MoveCar</strong>
           </p>
         </div>
         
@@ -1114,7 +1114,7 @@ async sendConfirmationAlerteGeographique(
             Email de confirmation d'alerte trajet
           </p>
           <p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 11px;">
-            © ${new Date().getFullYear()} Revolution. Tous droits réservés.
+            © ${new Date().getFullYear()} MoveCar. Tous droits réservés.
           </p>
         </div>
       </div>
@@ -1246,7 +1246,7 @@ async sendConfirmationAlerteGeographique(
           
           <p style="font-size: 16px; color: #374151; margin-top: 20px; text-align: center;">
             Bonne route !<br>
-            <strong style="color: #ea580c;">L'équipe Revolution</strong>
+            <strong style="color: #ea580c;">L'équipe MoveCar</strong>
           </p>
         </div>
         
@@ -1255,7 +1255,7 @@ async sendConfirmationAlerteGeographique(
             Cet email a été envoyé automatiquement suite à votre alerte géographique.
           </p>
           <p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 11px;">
-            © ${new Date().getFullYear()} Revolution. Tous droits réservés.
+            © ${new Date().getFullYear()} MoveCar. Tous droits réservés.
           </p>
         </div>
       </div>
@@ -1405,7 +1405,7 @@ async sendConfirmationAlerteGeographique(
           
           <p style="font-size: 16px; color: #374151; margin-top: 20px; text-align: center;">
             Bonne route !<br>
-            <strong style="color: #ea580c;">L'équipe Revolution</strong>
+            <strong style="color: #ea580c;">L'équipe MoveCar</strong>
           </p>
         </div>
         
@@ -1414,7 +1414,7 @@ async sendConfirmationAlerteGeographique(
             Cet email a été envoyé automatiquement suite à votre alerte de trajet.
           </p>
           <p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 11px;">
-            © ${new Date().getFullYear()} Revolution. Tous droits réservés.
+            © ${new Date().getFullYear()} MoveCar. Tous droits réservés.
           </p>
         </div>
       </div>
@@ -1447,7 +1447,7 @@ async sendAgenceCreatedCompleteProfile(data: {
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <div style="background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
         <h1 style="color: white; margin: 0; font-size: 28px;">🏢 Agence créée avec succès</h1>
-        <p style="color: #fed7aa; margin: 10px 0 0 0;">Bienvenue sur Revolution</p>
+        <p style="color: #fed7aa; margin: 10px 0 0 0;">Bienvenue sur MoveCar</p>
       </div>
 
       <div style="background-color: #ffffff; padding: 40px; border: 1px solid #e5e7eb; border-top: none;">
@@ -1456,7 +1456,7 @@ async sendAgenceCreatedCompleteProfile(data: {
         <p style="font-size: 16px; line-height: 1.6; color: #374151;">Bonjour,</p>
 
         <p style="font-size: 16px; line-height: 1.6; color: #374151;">
-          Votre agence a bien été créée sur la plateforme Revolution. Pour l'activer pleinement, merci de compléter votre profil agent.
+          Votre agence a bien été créée sur la plateforme MoveCar. Pour l'activer pleinement, merci de compléter votre profil agent.
         </p>
 
         <div style="background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 2px solid #ea580c; padding: 20px; margin: 25px 0; border-radius: 10px; text-align: center;">
@@ -1521,7 +1521,7 @@ async sendAgenceCreatedCompleteProfile(data: {
 
         <p style="font-size: 16px; color: #374151; margin-top: 20px; text-align: center;">
           Bienvenue à bord !<br>
-          <strong style="color: #ea580c;">L'équipe Revolution</strong>
+          <strong style="color: #ea580c;">L'équipe MoveCar</strong>
         </p>
       </div>
 
@@ -1530,7 +1530,7 @@ async sendAgenceCreatedCompleteProfile(data: {
           Cet email a été envoyé automatiquement suite à la création de votre agence.
         </p>
         <p style="margin: 5px 0 0 0; color: #9ca3af; font-size: 11px;">
-          © ${new Date().getFullYear()} Revolution. Tous droits réservés.
+          © ${new Date().getFullYear()} MoveCar. Tous droits réservés.
         </p>
       </div>
     </div>
@@ -1575,7 +1575,7 @@ async sendReportRendezvousPartenaire(data: {
 
       <!-- Header -->
       <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0; font-size: 28px;">Revolution</h1>
+        <h1 style="color: white; margin: 0; font-size: 28px;">MoveCar</h1>
         <p style="color: #fef3c7; margin: 10px 0 0 0;">Rendez-vous reporté</p>
       </div>
 
@@ -1626,7 +1626,7 @@ async sendReportRendezvousPartenaire(data: {
 
         <p style="font-size: 16px; color: #374151; margin-top: 20px;">
           Cordialement,<br/>
-          <strong style="color: #ea580c;">L'équipe Revolution</strong>
+          <strong style="color: #ea580c;">L'équipe MoveCar</strong>
         </p>
       </div>
 
@@ -1671,7 +1671,7 @@ async sendRefusReservation(data: {
 
       <!-- Header -->
       <div style="background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-        <h1 style="color: white; margin: 0; font-size: 28px;">Revolution</h1>
+        <h1 style="color: white; margin: 0; font-size: 28px;">MoveCar</h1>
         <p style="color: #fee2e2; margin: 10px 0 0 0;">Réservation refusée</p>
       </div>
 
@@ -1733,7 +1733,7 @@ async sendRefusReservation(data: {
 
         <p style="font-size: 16px; color: #374151; margin-top: 20px;">
           Cordialement,<br/>
-          <strong style="color: #ea580c;">L'équipe Revolution</strong>
+          <strong style="color: #ea580c;">L'équipe MoveCar</strong>
         </p>
       </div>
 
