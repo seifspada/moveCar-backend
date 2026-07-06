@@ -340,6 +340,20 @@ export class MissionSessionService {
     `Session ${input.sessionId} terminie pour mission ${session.missionId}`,
   );
 
+  // ── Calcul du score logistique ML en fire-and-forget ──
+  // Ne doit jamais bloquer la réponse mobile
+  // noteAgent=undefined → le service utilisera mission.noteAgent depuis la DB, ou 4.0 par défaut
+  this.scoresMlService
+    .calculateScoreAndSave(session.missionId)
+    .catch((err) =>
+      this.logger.error(
+        `Échec calcul score logistique pour mission ${session.missionId}: ${
+          err?.message ?? err
+        }`,
+      ),
+    );
+
+
   return this.mapToEntity(updated);
 }
 

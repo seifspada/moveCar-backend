@@ -10,6 +10,9 @@ export class ScoresMlService {
   private readonly arrivalCityRadiusMeters = Number(
     process.env.ARRIVAL_CITY_RADIUS_METERS || 10000,
   );
+  // Limites imposées par le modèle ML
+  private readonly MAX_PICKUP_DELAY_MIN = 240;
+  private readonly MAX_DELIVERY_DELAY_MIN = 300;
 
   constructor(
     private readonly httpService: HttpService,
@@ -70,6 +73,40 @@ export class ScoresMlService {
     }
   }
 
+  /**
+   * Recalcule le score logistique pour toutes les missions TERMINEE sans score
+   */
+  async recalculateAllPendingScores(): Promise<{ processed: number; errors: number; results: any[] }> {
+    const missions = await this.prisma.mission.findMany({
+      where: {
+        statut: 'TERMINEE',
+        scoreLogistique: null,
+      },
+      select: { id: true },
+    });
+
+    this.logger.log(`Recalcul en masse: ${missions.length} missions sans score trouvees`);
+
+    let processed = 0;
+    let errors = 0;
+    const results: any[] = [];
+
+    for (const mission of missions) {
+      try {
+        const result = await this.calculateScoreAndSave(mission.id);
+        processed++;
+        results.push({ missionId: mission.id, status: 'OK', score: result?.scoreLogistique });
+      } catch (err: any) {
+        errors++;
+        results.push({ missionId: mission.id, status: 'ERROR', error: err?.message });
+        this.logger.error(`Erreur recalcul mission ${mission.id}: ${err?.message}`);
+      }
+    }
+
+    this.logger.log(`Recalcul termine: ${processed} succes, ${errors} erreurs`);
+    return { processed, errors, results };
+  }
+
   private async collectFeatures(missionId: string, noteAgent?: number): Promise<any> {
     const mission = await this.prisma.mission.findUnique({
       where: { id: missionId },
@@ -108,10 +145,7 @@ export class ScoresMlService {
       throw new Error(`Reservation introuvable pour la session ${session.id}`);
     }
 
-    const rating = noteAgent ?? mission.noteAgent;
-    if (rating == null) {
-      throw new Error(`noteAgent manquante pour la mission ${missionId}`);
-    }
+    const rating = noteAgent ?? mission.noteAgent ?? 4.0;
 
     let age = 35;
     if (reservation.adherent?.dateNaissance) {
@@ -145,10 +179,14 @@ export class ScoresMlService {
 
     const dayOfWeek = plannedDeparture.getDay();
     const mappedDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const pickupDelayMin = this.getPositiveDelayMinutes(session.dateDebut, plannedDeparture);
-    const deliveryDelayMin = plannedArrival
-      ? this.getPositiveDelayMinutes(session.dateFin, plannedArrival)
-      : 0;
+    const pickupDelayMin = Math.min(
+      this.getPositiveDelayMinutes(session.dateDebut, plannedDeparture),
+      this.MAX_PICKUP_DELAY_MIN,
+    );
+    const deliveryDelayMin = Math.min(
+      plannedArrival ? this.getPositiveDelayMinutes(session.dateFin, plannedArrival) : 0,
+      this.MAX_DELIVERY_DELAY_MIN,
+    );
 
     this.logger.log(
       `Features ML mission ${missionId}: departPrevu=${plannedDeparture.toISOString()}, ` +
@@ -183,9 +221,19 @@ export class ScoresMlService {
     const latitudeArrivee = Number(adresseArrivee?.latitude);
     const longitudeArrivee = Number(adresseArrivee?.longitude);
 
+    // Si pas de coordonnées GPS de fin (pas de tracking actif),
+    // on considère la mission comme validée manuellement
     if (
       !Number.isFinite(latitudeFin) ||
-      !Number.isFinite(longitudeFin) ||
+      !Number.isFinite(longitudeFin)
+    ) {
+      this.logger.warn(
+        `Mission sans coordonnées GPS de fin — bypass vérification arrivée (session.id=${session.id})`,
+      );
+      return { isInArrivalCity: true, distanceMeters: 0 };
+    }
+
+    if (
       !Number.isFinite(latitudeArrivee) ||
       !Number.isFinite(longitudeArrivee)
     ) {

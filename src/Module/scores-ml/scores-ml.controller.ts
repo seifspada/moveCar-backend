@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Logger } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, Logger, Body } from '@nestjs/common';
 import { ScoresMlService } from './scores-ml.service';
 import { ScoreParametersDto, ScoreParametersSummaryDto } from './dto/export-score-parameters.dto';
 
@@ -65,5 +65,34 @@ export class ScoresMlController {
       status: 'OK',
       message: 'Service Score ML actif - Export de parametres disponible',
     };
+  }
+
+  /**
+   * Force le recalcul du score logistique ML pour une mission terminée
+   * Utile pour les missions historiques sans score
+   * 
+   * Utilisation:
+   * POST /score-ml/recalculate/mission/{missionId}
+   * Body (optionnel): { "noteAgent": 4.5 }
+   */
+  @Post('recalculate/mission/:missionId')
+  async recalculateMissionScore(
+    @Param('missionId') missionId: string,
+    @Body() body?: { noteAgent?: number },
+  ): Promise<any> {
+    this.logger.log(`Recalcul forcé du score ML pour mission: ${missionId}`);
+    return this.scoresMlService.calculateScoreAndSave(missionId, body?.noteAgent);
+  }
+
+  /**
+   * Force le recalcul du score pour toutes les missions TERMINEE sans score
+   *
+   * Utilisation:
+   * POST /score-ml/recalculate/all-pending
+   */
+  @Post('recalculate/all-pending')
+  async recalculateAllPendingScores(): Promise<{ processed: number; errors: number; results: any[] }> {
+    this.logger.log('Recalcul en masse des scores manquants');
+    return this.scoresMlService.recalculateAllPendingScores();
   }
 }

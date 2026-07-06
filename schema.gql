@@ -408,6 +408,7 @@ type MissionTracking {
   longitude: Float!
   missionId: ID
   sessionId: ID
+  speed: Float
   timestamp: DateTime!
   timestampServer: DateTime
 }
@@ -465,7 +466,7 @@ type Mutation {
 
   """Modifier le rayon d'une alerte"""
   modifierRayonAlerte(id: String!, rayon: Int!): AlerteGeographique!
-  noterMissionConvoyeur(missionId: String!, note: Int!): Boolean!
+  noterMissionConvoyeur(missionId: String!, note: Float!): Boolean!
 
   """Refuser une demande d'annulation (agent)"""
   refuseCancellationRequest(id: String!, motifRefus: String!): ReservationMissionEntity!
@@ -1007,6 +1008,7 @@ input UpdateLocationInput {
   latitude: Float!
   longitude: Float!
   missionId: ID!
+  speed: Float
   timestamp: DateTime!
 }
 
